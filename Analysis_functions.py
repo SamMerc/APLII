@@ -268,13 +268,9 @@ def RV_clip(RV, L, threshold):
     bad_indices = []
     
     #Scanning the RV array for outliers
-    plt.plot(np.abs(RV), '.')
-    plt.axhline((1+threshold)*np.median(np.abs(RV)))
-    plt.axhline((1-threshold)*np.median(np.abs(RV)))
-    plt.show()
     for i in range(len(RV)):
 
-        if np.abs(RV[i]) > (1+threshold)*np.median(np.abs(RV)) or np.abs(RV[i]) < (1-threshold)*np.median(np.abs(RV)):
+        if RV[i] > (1+threshold)*np.median(RV) or RV[i] < (1-threshold)*np.median(RV):
                 bad_indices.append(i)
     print(bad_indices)
     L = np.delete(L, bad_indices, axis=0)
@@ -485,7 +481,7 @@ def fit_spctr_line(fit_func, eval_func, low_lim, up_lim, ini_guess, guess_bounds
         else:
             plt.plot(bound_x, bound_y, 'b.', label='data')
         plt.plot(bound_x, model, c, label='Best-fit')
-        plt.xlabel('Wavelength (angstrom)')
+        plt.xlabel('Wavelength ($\AA$)')
         plt.ylabel('Normalized Flux')
         plt.legend()
         print(thetas[i])
@@ -534,7 +530,7 @@ def plot_TS_Periodo(T, L, L_err, title1, title2, mode, error=False, fit=False, o
         ax1.plot(model_x, model_poly(model_x), 'r', label=str(order)+'th order polynomial fit')
     ax1.set_xlabel('Time (MJD)')
     ax1.set_ylabel(title1)
-    ax1.set_title(title2+'Time Series'+mode)
+    ax1.set_title(title2+' Time Series '+mode)
     if fit:
         ax1.legend()
 
@@ -542,9 +538,9 @@ def plot_TS_Periodo(T, L, L_err, title1, title2, mode, error=False, fit=False, o
     ax2.loglog(Periodo[0], Periodo[1])
     ax2.set_xlabel('Frequency (1/d)')
     ax2.set_ylabel('Power')
-    ax2.set_title(title2+'Periodogram'+mode)
+    ax2.set_title(title2+' Periodogram '+mode)
     
     ax2.axvline(oscillation_freq, color='r', label='Oscillation Frequency')
     ax2.legend()
-    
+    plt.savefig('Plot_Results/TS_Periodo_'+title2+'_'+mode+'.pdf')
     plt.show()
