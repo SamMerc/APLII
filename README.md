@@ -1,5 +1,6 @@
-# Astrophysics Lab Spring Semester 2023 -- Studying the variability of the He triplet to enhance the detection of evaporating exoplanet atmospheres
+# Astrophysics Lab Spring Semester 2023 : Studying the variability of the He triplet to enhance the detection of evaporating exoplanet atmospheres
 
+Supervisors: Xavier Dumusque and Vincent Bourrier
 
 With dozens of new detections, the Helium triplet is becoming the main tracer of evaporating exoplanet atmospheres. 
 It is a feature that can be detected from the ground in the near-infrared, and with the upcoming observations provided by the NIRPS instrument, many more detections are awaiting. 
