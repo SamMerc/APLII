@@ -88,14 +88,14 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
 
     #Initial mode analysis to see the modes used in the data.
     for i in range(len(os.listdir(file_directory))):
-        file = pf.open(file_directory+'/'+os.listdir(file_directory)[i])
+        file = pf.open(file_directory+'/'+sorted(os.listdir(file_directory))[i])
         mode[i] = file[0].header['HIERARCH ESO INS MODE'][1]
     
     #Loop over all the files in the directory and populate the arrays.
     for i in range(len(os.listdir(file_directory))):
         #Opening the files in the directories.
-        file = pf.open(file_directory+'/'+os.listdir(file_directory)[i])
-        file_CCF = pf.open(CCF_directory +'/'+os.listdir(CCF_directory)[i])
+        file = pf.open(file_directory+'/'+sorted(os.listdir(file_directory))[i])
+        file_CCF = pf.open(CCF_directory +'/'+sorted(os.listdir(CCF_directory))[i])
         
         #Extracting the wavelength.
         total_lamda[i] = file[4].data[order]
@@ -227,7 +227,7 @@ def segment_and_reduce(modes, SNR, L, RV, cutoff, thresh):
         #We remove spectra and their RV values with SNR lower than the cutoff value. 
         SNR_HA = SNR[modes=='A']
         SNR_HE = SNR[modes=='E']
-    
+            
         L_HA = L_HA[SNR_HA>cutoff]
         L_HE = L_HE[SNR_HE>cutoff]
         
@@ -241,7 +241,7 @@ def segment_and_reduce(modes, SNR, L, RV, cutoff, thresh):
         return L_HA, L_HE
     #If there is one mode of observation.
     else:
-        #We remove spectra with SNR lower than the cutoff value. 
+        #We remove spectra with SNR lower than the cutoff value.     
         L_new = L[SNR>cutoff]
         
         RV_new = RV[SNR>cutoff]
