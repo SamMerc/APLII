@@ -34,10 +34,15 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
     :param total_RV: nested array, containing the RV values for each spectrum, obtained with a CCF.
     :param total_RV_err: nested array, containing the error on the RV values for each spectrum, obtained with a CCF.
     :param total_FWHM: nested array, containing the FWHM values for the CCF of each spectrum.
+    :param total_FWHM_err: nested array, containing the error on the FWHM for the CCF of each spectrum.
     :param total_BIS_SPAN: nested array, containing the Bisector Span values for the CCF of each spectrum.
+    :param total_BIS_SPAN_err: nested array, containing the error on the Bisector Span for the CCF of each spectrum.
     :param total_H2O: nested array, containing the integrated column density of H2O for each spectrum.
+    :param total_H2O_err: nested array, containing the error on the integrated column density of H2O for each spectrum.
     :param total_O2: nested array, containing the integrated column density of O2 for each spectrum.
+    :param total_O2_err: nested array, containing the error on the integrated column density of O2 for each spectrum.    
     :param total_CO2: nested array, containing the integrated column density of CO2 for each spectrum.
+    :param total_CO2_err: nested array, containing the error on the integrated column density of CO2 for each spectrum.    
     :param total_AIRM: nested array, containing the airmass at the time of observation for each spectrum.
     '''
     
@@ -72,14 +77,25 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
     #Contains the FWHM of the CCF of the spectra.
     total_FWHM = np.zeros((len(os.listdir(file_directory))))
     
+    #Contains the error on the FWHM of the CCF of the spectra.
+    total_FWHM_err = np.zeros((len(os.listdir(file_directory))))
+    
     #Contains the Bisector span of the CCF of the spectra.
     total_BIS_SPAN = np.zeros((len(os.listdir(file_directory))))
+    
+    #Contains the error on the Bisector span of the CCF of the spectra.
+    total_BIS_SPAN_err = np.zeros((len(os.listdir(file_directory))))
     
     #Contains the integrated column density of H2O, CO2 and O2 at the time of acquisition of the spectra.
     total_H2O = np.zeros((len(os.listdir(file_directory))))
     total_O2 = np.zeros((len(os.listdir(file_directory))))
     total_CO2 = np.zeros((len(os.listdir(file_directory))))
     
+    #Contains the error on the integrated column density of H2O, CO2 and O2 at the time of acquisition of the spectra.
+    total_H2O_err = np.zeros((len(os.listdir(file_directory))))
+    total_O2_err = np.zeros((len(os.listdir(file_directory))))
+    total_CO2_err = np.zeros((len(os.listdir(file_directory))))
+
     #Contains the airmass at the time of observation of each spectrum.
     total_AIRM = np.zeros((len(os.listdir(file_directory))))
     
@@ -110,19 +126,24 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
         total_RV[i] = file_CCF[0].header['HIERARCH ESO QC CCF RV']
         total_RV_err[i] = file_CCF[0].header['HIERARCH ESO QC CCF RV ERROR']
         
-        #Getting the FWHM.
+        #Getting the error and value on the FWHM.
         total_FWHM[i] = file_CCF[0].header['HIERARCH ESO QC CCF FWHM']
-    
-        #Getting the Bisector Span.
+        total_FWHM_err[i] = file_CCF[0].header['HIERARCH ESO QC CCF FWHM ERROR']
+        
+        #Getting the error and value on the Bisector Span.
         total_BIS_SPAN[i] = file_CCF[0].header['HIERARCH ESO QC CCF BIS SPAN']
-    
+        total_BIS_SPAN_err[i] = file_CCF[0].header['HIERARCH ESO QC CCF BIS SPAN ERROR']
+        
         #Getting the airmass .
         total_AIRM[i] = (file[0].header['HIERARCH ESO TEL AIRM START'] + file[0].header['HIERARCH ESO TEL AIRM END'])/2
     
-        #Getting the integrated column density for H2O, O2, CO2.
+        #Getting the error and value of the integrated column density for H2O, O2, CO2.
         total_H2O[i] = file[0].header['HIERARCH ESO QC TELL H2O IWV']
+        total_H2O_err[i] = file[0].header['HIERARCH ESO QC TELL H2O IWV ERR']
         total_O2[i] = file[0].header['HIERARCH ESO QC TELL O2 IWV']
+        total_O2_err[i] = file[0].header['HIERARCH ESO QC TELL O2 IWV ERR']
         total_CO2[i] = file[0].header['HIERARCH ESO QC TELL CO2 IWV']
+        total_CO2_err[i] = file[0].header['HIERARCH ESO QC TELL CO2 IWV ERR']
     
         #Retrieving the SNR of each spectra at the order of interest.
         total_SNR[i] = file[0].header['HIERARCH ESO QC ORDER'+str(order)+' SNR']
@@ -188,7 +209,7 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
             total_norm_spctr[i] = total_spctr[i]/np.mean(total_spctr[i])
             total_norm_err[i] = total_err[i]/np.mean(total_spctr[i])
 
-    return total_lamda, total_spctr, total_norm_spctr, total_err, total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_BIS_SPAN, total_H2O, total_O2, total_CO2, total_AIRM
+    return total_lamda, total_spctr, total_norm_spctr, total_err, total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM
 
 
 
@@ -204,14 +225,14 @@ def segment_and_reduce(modes, SNR, L, RV, cutoff, thresh):
     See the possible quantities output by the extraction function.
     :param RV: nested array, containing the RV values from the CCF for each observation.
     :param cutoff: int, value of the SNR below which we remove the observations.
-    :param threshold: float, limit on the values we select to be outliers in the RV clipping method.
+    :param thresh: float, limit on the values we select to be outliers in the RV clipping method.
     Returns
     ----------
     :param L_HA: nested array, containing the data observed with the observation mode HA,
-    with the low SNR observations removed.
-    :param L_HA: nested array, containing the data observed with the observation mode HA,
-    with the low SNR observations removed.
-    :param L: nested array, containing the data with the low SNR observations removed.
+    with the low SNR and RV outlier observations removed.
+    :param L_HE: nested array, containing the data observed with the observation mode HE,
+    with the low SNR and RV outlier observations removed.
+    :param L_new_new: nested array, containing the data with the low SNR and RV outlier observations removed.
     '''
 
     #Distinguish two cases depending on the number of modes of observation
@@ -269,10 +290,11 @@ def RV_clip(RV, L, threshold):
     
     #Scanning the RV array for outliers
     for i in range(len(RV)):
-
         if RV[i] > (1+threshold)*np.median(RV) or RV[i] < (1-threshold)*np.median(RV):
                 bad_indices.append(i)
+    
     print(bad_indices)
+    #Removing the outliers
     L = np.delete(L, bad_indices, axis=0)
     return L
         
@@ -358,10 +380,10 @@ def gaussian_L(x, A, offset, mu, std, lin):
     ----------
     :param x: array, values used to evaluate the linear-trend Gaussian.
     :param A: float, depth/amplitude of the Gaussian.
+    :param offset: float, offset term of the linear trend.
     :param mu: float, position/expected value of the Gaussian.
     :param std: float, width/standard deviation of the Gaussian.
     :param lin: float, linear term of the linear trend.
-    :param offset: float, offset term of the linear trend.
     Returns
     ----------
     :param Gauss_l: array, containing the linear-trend Gaussian values.
@@ -445,7 +467,7 @@ def fit_spctr_line(fit_func, eval_func, low_lim, up_lim, ini_guess, guess_bounds
     Returns
     ----------
     :param thetas: array, containing best-fit parameters for the fit to each (x[i], y[i]) pair.
-    :param thetas_err: array, containing the error bars on the best-fit parameters for the fit to each (x[i], y[i]) pair.
+    :param err: array, containing the error bars on the best-fit parameters for the fit to each (x[i], y[i]) pair.
     '''
 
     #Initializing the arrays containing the best-fit parameters and the errors on them.
@@ -490,7 +512,7 @@ def fit_spctr_line(fit_func, eval_func, low_lim, up_lim, ini_guess, guess_bounds
     return thetas, err
 
 
-def plot_TS_Periodo(T, L, L_err, title1, title2, mode, error=False, fit=False, order=1, N=1000):
+def plot_TS_Periodo(T, L, L_err, title1, title2, mode, fit=False, order=1, N=1000):
     '''
     Function to plot the Time series and periodogram of a particular quantity of interest L.
     There is also the option of fitting a polynomial to the time series of the quantity of interest.
@@ -504,24 +526,20 @@ def plot_TS_Periodo(T, L, L_err, title1, title2, mode, error=False, fit=False, o
     to say for which mode of observation we are plotting the quantity of interest.
     :param fit: bool, whether or not to fit a polynomial to the time series.
     :param order: int, if fit=True, the order of the polynomial to fit to the time series.
-    :param N: int, number of points to plot the polynomial with with.
+    :param N: int, number of points to plot the polynomial with.
     Returns
     ----------
-    :param thetas: array, containing best-fit parameters for the fit to each (x[i], y[i]) pair.
-    :param thetas_err: array, containing the error bars on the best-fit parameters for the fit to each (x[i], y[i]) pair.
-    '''
-
-
+     '''
     oscillation_freq = 24*60/5.4
     
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=[15, 4])
-    if error:
+    if len(L_err)!=0:
         model_poly = np.poly1d(np.polyfit(T, L, order, w=1/L_err))
     else:
         model_poly = np.poly1d(np.polyfit(T, L, order))
     model_x = np.linspace(min(T), max(T), N)
     
-    if error:
+    if len(L_err)!=0:
         ax1.errorbar(T, L, yerr=L_err, fmt='.', label='Data')
     else:
         ax1.plot(T, L, '.', label='Data')
