@@ -404,7 +404,7 @@ def eval_gaussian_L(x, params):
     :param Gauss_l: array, containing the linear-trend Gaussian values.
     '''
     A, offset, mu, std, lin = params
-    # Making the Gaussian distributio 
+    # Making the Gaussian distribution
     Gauss_l = (A * np.exp(-0.5*((x-mu)/std)**2)) + (lin*x+offset)
     return Gauss_l
 
@@ -512,7 +512,7 @@ def fit_spctr_line(fit_func, eval_func, low_lim, up_lim, ini_guess, guess_bounds
     return thetas, err
 
 
-def plot_TS_Periodo(T, L, L_err, title1, title2, mode, fit=False, order=1, N=1000):
+def plot_TS_Periodo(T, L, L_err, title1, title2, mode, save=True, fit=False, order=1, N=1000):
     '''
     Function to plot the Time series and periodogram of a particular quantity of interest L.
     There is also the option of fitting a polynomial to the time series of the quantity of interest.
@@ -524,6 +524,7 @@ def plot_TS_Periodo(T, L, L_err, title1, title2, mode, fit=False, order=1, N=100
     :param title2: string, used as the title for the time series and periodogram.
     :param mode: string, if there are multiple modes of observation, it is used in the title 
     to say for which mode of observation we are plotting the quantity of interest.
+    :param save: bool, whether or not to save the Time series and periodogram to a PDF.
     :param fit: bool, whether or not to fit a polynomial to the time series.
     :param order: int, if fit=True, the order of the polynomial to fit to the time series.
     :param N: int, number of points to plot the polynomial with.
@@ -534,7 +535,7 @@ def plot_TS_Periodo(T, L, L_err, title1, title2, mode, fit=False, order=1, N=100
     
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=[15, 4])
     if len(L_err)!=0:
-        model_poly = np.poly1d(np.polyfit(T, L, order, w=1/L_err))
+        model_poly = np.poly1d(np.polyfit(T, L, order, w=1/L_err**2))
     else:
         model_poly = np.poly1d(np.polyfit(T, L, order))
     model_x = np.linspace(min(T), max(T), N)
@@ -560,5 +561,43 @@ def plot_TS_Periodo(T, L, L_err, title1, title2, mode, fit=False, order=1, N=100
     
     ax2.axvline(oscillation_freq, color='r', label='Oscillation Frequency')
     ax2.legend()
-    plt.savefig('Plot_Results/TS_Periodo_'+title2+'_'+mode+'.pdf')
+    if save:
+        plt.savefig('Plot_Results/TS_Periodo_'+title2+'_'+mode+'.pdf')
     plt.show()
+
+    
+def SNR_calculator(low, high, tot_lamda, tot_spctr, tot_err):
+    '''
+    Function to calculate the SNR manually using a part of the continuum of the spectrum
+    that does not present any important variations due to absorption/emission lines.
+    Parameters
+    ----------
+    :param low: float, lower wavelength limit for the continuum.
+    :param high: float, upper wavelength limit for the continuum.
+    :param tot_lamda: array, containing the wavelength values of the spectrum.
+    :param tot_spctr: array, containing the flux values of the spectrum. 
+    :param tot_err: array, containing the flux error values of the spectrum.
+    Returns
+    :param measured_SNR: array, containing the calculated SNR values for all the spectrum.
+    ----------
+    '''
+    #Initiating the SNR array.
+    measured_SNR = np.ones(tot_lamda.shape[0])
+    
+    #Populating the SNR array.
+    for h in range(len(tot_lamda)):
+        
+        #Defining the continuum
+        continuum_lam = bound(low, high, tot_lamda[h], tot_lamda[h])
+        continuum_spctr = bound(low, high, tot_lamda[h], tot_spctr[h])
+        continuum_err = bound(low, high, tot_lamda[h], tot_err[h])
+
+        #Getting the weighted average and standard deviation of the flux in the continuum
+        avg = np.average(continuum_spctr, weights = 1/continuum_err**2)
+        variance = np.average((continuum_spctr - avg)**2, weights = 1/continuum_err**2)
+        std = np.sqrt(variance)
+        
+        #Calculating the SNR from the average and standard deviation of the continuum flux
+        measured_SNR[h] = avg/std
+        
+    return measured_SNR
