@@ -213,7 +213,7 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
 
 
 
-def segment_and_reduce(modes, SNR, L, RV, cutoff, thresh):
+def segment_and_reduce(modes, SNR, L, RV, cutoff, airmass):
     '''
     Function to remove the data for the spectra with low SNR and separate
     the data based on the mode of observation used.
@@ -225,7 +225,7 @@ def segment_and_reduce(modes, SNR, L, RV, cutoff, thresh):
     See the possible quantities output by the extraction function.
     :param RV: nested array, containing the RV values from the CCF for each observation.
     :param cutoff: int, value of the SNR below which we remove the observations.
-    :param thresh: float, limit on the values we select to be outliers in the RV clipping method.
+    :param airmass: array, containing the airmass values for each time of observation.
     Returns
     ----------
     :param L_HA: nested array, containing the data observed with the observation mode HA,
@@ -234,10 +234,16 @@ def segment_and_reduce(modes, SNR, L, RV, cutoff, thresh):
     with the low SNR and RV outlier observations removed.
     :param L_new_new: nested array, containing the data with the low SNR and RV outlier observations removed.
     '''
-
+    
+    #We only select the observations with favorable airmass
+    L = L[airmass<2]
+    RV = RV[airmass<2]
+    SNR = SNR[airmass<2]
+    modes = modes[airmass<2]
+    
     #Distinguish two cases depending on the number of modes of observation
     #If there are two modes of observation.
-    if np.sum(modes=='A') != len(modes) and np.sum(modes=='E')!= len(modes):
+    if np.sum(modes=='A') != len(modes) and np.sum(modes=='E')!= len(modes):        
         #We separate the spectra and their RV values based on their observing mode.
         L_HA = L[modes=='A']
         L_HE = L[modes=='E']
@@ -256,8 +262,8 @@ def segment_and_reduce(modes, SNR, L, RV, cutoff, thresh):
         RV_HE = RV_HE[SNR_HE>cutoff]
 
         #We remove the spectra with outlier RV values
-        L_HA = RV_clip(RV_HA, L_HA, thresh)
-        L_HE = RV_clip(RV_HE, L_HE, thresh)
+        L_HA = RV_clip(RV_HA, L_HA)
+        L_HE = RV_clip(RV_HE, L_HE)
 
         return L_HA, L_HE
     #If there is one mode of observation.
@@ -267,20 +273,19 @@ def segment_and_reduce(modes, SNR, L, RV, cutoff, thresh):
         
         RV_new = RV[SNR>cutoff]
         #We remove the spectra with outlier RV values
-        L_new_new = RV_clip(RV_new, L_new, thresh)
+        L_new_new = RV_clip(RV_new, L_new)
         return L_new_new
 
     
-def RV_clip(RV, L, threshold):
+def RV_clip(RV, L):
     '''
     Function to remove the data with outlier values of RV. We do this by looking for RV values
-    that are outside the RV data series by a factor of 2.
+    that are outside the RV data series by 20 sigma (IQR in our case since we are using median).
     Parameters
     ----------
     :param RV: array, containing the RV data along which we look for outliers.
     :param L: array, containing the data we are interested in and whose elements we will remove 
     if they are associated to outlier RV data points.
-    :param threshold: float, limit on the values we select to be outliers.
     Returns
     ----------
     :param L: array, containing the array L with the elements associated to outlier RV values removed.
@@ -288,9 +293,12 @@ def RV_clip(RV, L, threshold):
     #Initializing an array to contain the indices of the outliers
     bad_indices = []
     
+    #Defining the interquartile range
+    IQR = np.percentile(RV, 75)-np.percentile(RV, 25)
+    
     #Scanning the RV array for outliers
     for i in range(len(RV)):
-        if RV[i] > (1+threshold)*np.median(RV) or RV[i] < (1-threshold)*np.median(RV):
+        if RV[i] > (1+20*IQR)*np.median(RV) or RV[i] < (1-20*IQR)*np.median(RV):
                 bad_indices.append(i)
     
     print(bad_indices)
