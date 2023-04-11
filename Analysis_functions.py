@@ -213,7 +213,7 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
 
 
 
-def segment_and_reduce(modes, SNR, L, RV, cutoff, airmass):
+def segment_and_reduce(modes, SNR, L, RV, airmass, sigma_coeff):
     '''
     Function to remove the data for the spectra with low SNR and separate
     the data based on the mode of observation used.
@@ -224,7 +224,6 @@ def segment_and_reduce(modes, SNR, L, RV, cutoff, airmass):
     :param L: nested array, containing the quantity of interest for each spectrum (RV, flux, ...).
     See the possible quantities output by the extraction function.
     :param RV: nested array, containing the RV values from the CCF for each observation.
-    :param cutoff: int, value of the SNR below which we remove the observations.
     :param airmass: array, containing the airmass values for each time of observation.
     Returns
     ----------
@@ -240,27 +239,34 @@ def segment_and_reduce(modes, SNR, L, RV, cutoff, airmass):
     RV = RV[airmass<2]
     SNR = SNR[airmass<2]
     modes = modes[airmass<2]
+    flag = []
+
+    #Removing SNR outliers 
+    IQR = np.percentile(np.diff(SNR), 75)-np.percentile(np.diff(SNR), 25)
+    for i in range(len(np.diff(SNR))):
+        if np.abs(np.diff(SNR)[i]/np.median(np.diff(SNR))) > sigma_coeff*IQR:
+            flag.append(i+1)
+    
+    new_SNR = np.delete(SNR, flag[:-1], axis=0)
+    new_L = np.delete(L, flag[:-1], axis=0)
+
+    new_RV = np.delete(RV, flag[:-1], axis=0)
+    new_modes = np.delete(modes, flag[:-1], axis=0)
     
     #Distinguish two cases depending on the number of modes of observation
     #If there are two modes of observation.
-    if np.sum(modes=='A') != len(modes) and np.sum(modes=='E')!= len(modes):        
+    if np.sum(modes=='A') != len(modes) and np.sum(modes=='E')!= len(modes): 
         #We separate the spectra and their RV values based on their observing mode.
-        L_HA = L[modes=='A']
-        L_HE = L[modes=='E']
+        L_HA = new_L[new_modes=='A']
+        L_HE = new_L[new_modes=='E']
 
-        RV_HA = RV[modes=='A']
-        RV_HE = RV[modes=='E']
+        RV_HA = new_RV[new_modes=='A']
+        RV_HE = new_RV[new_modes=='E']
 
         #We remove spectra and their RV values with SNR lower than the cutoff value. 
-        SNR_HA = SNR[modes=='A']
-        SNR_HE = SNR[modes=='E']
-            
-        L_HA = L_HA[SNR_HA>cutoff]
-        L_HE = L_HE[SNR_HE>cutoff]
-        
-        RV_HA = RV_HA[SNR_HA>cutoff]
-        RV_HE = RV_HE[SNR_HE>cutoff]
-
+        SNR_HA = new_SNR[new_modes=='A']
+        SNR_HE = new_SNR[new_modes=='E']
+    
         #We remove the spectra with outlier RV values
         L_HA = RV_clip(RV_HA, L_HA)
         L_HE = RV_clip(RV_HE, L_HE)
@@ -268,12 +274,9 @@ def segment_and_reduce(modes, SNR, L, RV, cutoff, airmass):
         return L_HA, L_HE
     #If there is one mode of observation.
     else:
-        #We remove spectra with SNR lower than the cutoff value.     
-        L_new = L[SNR>cutoff]
-        
-        RV_new = RV[SNR>cutoff]
         #We remove the spectra with outlier RV values
-        L_new_new = RV_clip(RV_new, L_new)
+        L_new_new = RV_clip(new_RV, new_L)
+
         return L_new_new
 
     
@@ -301,7 +304,6 @@ def RV_clip(RV, L):
         if RV[i] > (1+20*IQR)*np.median(RV) or RV[i] < (1-20*IQR)*np.median(RV):
                 bad_indices.append(i)
     
-    print(bad_indices)
     #Removing the outliers
     L = np.delete(L, bad_indices, axis=0)
     return L
