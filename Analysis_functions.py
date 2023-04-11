@@ -183,8 +183,8 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
             total_err[i] = BC_DLL_err/Sun_BB(total_lamda[i]*u.AA).value
             
             #Making the normalized spectra and error bars.
-            total_norm_spctr[i] = total_spctr[i]/np.mean(total_spctr[i])
-            total_norm_err[i] = total_err[i]/np.mean(total_spctr[i])
+            total_norm_spctr[i] = total_spctr[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
+            total_norm_err[i] = total_err[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
                     
         #If there is only one mode of observation.
         else:
@@ -206,14 +206,14 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
             total_err[i] = BC_DLL_err/Sun_BB(file[4].data[order]*u.AA).value
             
             #Making the normalized spectra and error bars.
-            total_norm_spctr[i] = total_spctr[i]/np.mean(total_spctr[i])
-            total_norm_err[i] = total_err[i]/np.mean(total_spctr[i])
+            total_norm_spctr[i] = total_spctr[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
+            total_norm_err[i] = total_err[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
 
     return total_lamda, total_spctr, total_norm_spctr, total_err, total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM
 
 
 
-def segment_and_reduce(modes, SNR, L, RV, airmass, sigma_coeff):
+def segment_and_reduce(modes, SNR, L, RV, airmass, sigma_coeff_SNR, sigma_coeff_RV=20):
     '''
     Function to remove the data for the spectra with low SNR and separate
     the data based on the mode of observation used.
@@ -244,7 +244,7 @@ def segment_and_reduce(modes, SNR, L, RV, airmass, sigma_coeff):
     #Removing SNR outliers 
     IQR = np.percentile(np.diff(SNR), 75)-np.percentile(np.diff(SNR), 25)
     for i in range(len(np.diff(SNR))):
-        if np.abs(np.diff(SNR)[i]/np.median(np.diff(SNR))) > sigma_coeff*IQR:
+        if np.abs(np.diff(SNR)[i]/np.median(np.diff(SNR))) > sigma_coeff_SNR*IQR:
             flag.append(i+1)
     
     new_SNR = np.delete(SNR, flag[:-1], axis=0)
@@ -268,19 +268,19 @@ def segment_and_reduce(modes, SNR, L, RV, airmass, sigma_coeff):
         SNR_HE = new_SNR[new_modes=='E']
     
         #We remove the spectra with outlier RV values
-        L_HA = RV_clip(RV_HA, L_HA)
-        L_HE = RV_clip(RV_HE, L_HE)
+        L_HA = RV_clip(RV_HA, L_HA, sigma_coeff_RV)
+        L_HE = RV_clip(RV_HE, L_HE, sigma_coeff_RV)
 
         return L_HA, L_HE
     #If there is one mode of observation.
     else:
         #We remove the spectra with outlier RV values
-        L_new_new = RV_clip(new_RV, new_L)
+        L_new_new = RV_clip(new_RV, new_L, sigma_coeff_RV)
 
         return L_new_new
 
     
-def RV_clip(RV, L):
+def RV_clip(RV, L, sig):
     '''
     Function to remove the data with outlier values of RV. We do this by looking for RV values
     that are outside the RV data series by 20 sigma (IQR in our case since we are using median).
@@ -301,7 +301,7 @@ def RV_clip(RV, L):
     
     #Scanning the RV array for outliers
     for i in range(len(RV)):
-        if RV[i] > (1+20*IQR)*np.median(RV) or RV[i] < (1-20*IQR)*np.median(RV):
+        if RV[i] > (1+sig*IQR)*np.median(RV) or RV[i] < (1-sig*IQR)*np.median(RV):
                 bad_indices.append(i)
     
     #Removing the outliers
@@ -455,7 +455,7 @@ def eval_Voigt(x, params):
     return voigt
 
 
-def fit_spctr_line(fit_func, eval_func, low_lim, up_lim, ini_guess, guess_bounds, x, y, y_err, c, errors=True):
+def fit_spctr_line(fit_func, eval_func, low_lim, up_lim, ini_guess, guess_bounds, x, y, y_err, c):
     '''
     Function to fit a function, fit_func, to a spectral line located in the wavelength range [low_lim, up_lim].
     We give as input a guess for the best-fit parameters and the acceptable bounds within which the algorithm
@@ -491,11 +491,11 @@ def fit_spctr_line(fit_func, eval_func, low_lim, up_lim, ini_guess, guess_bounds
         # wavelength range of interest.
         bound_x = bound(low_lim, up_lim, x[i], x[i])
         bound_y = bound(low_lim, up_lim, x[i], y[i])
-        if errors:
+        if len(y_err)!=0:
             bound_y_err = bound(low_lim, up_lim, x[i], y_err[i])
         
         #Using the curve_fit function from scipy to fit the function of interest to the data.
-        if errors:
+        if len(y_err)!=0:
             params, cov = curve_fit(fit_func, bound_x, bound_y, sigma=bound_y_err, p0 = ini_guess, bounds = guess_bounds)
         else:
             params, cov = curve_fit(fit_func, bound_x, bound_y, p0 = ini_guess, bounds = guess_bounds)
@@ -508,7 +508,7 @@ def fit_spctr_line(fit_func, eval_func, low_lim, up_lim, ini_guess, guess_bounds
 
         #Plotting the best-fit model on top of the data.
         plt.figure(figsize=[8, 5])
-        if errors:
+        if len(y_err)!=0:
             plt.errorbar(bound_x, bound_y, yerr=bound_y_err,  fmt='b.', label='data')
         else:
             plt.plot(bound_x, bound_y, 'b.', label='data')
@@ -544,23 +544,23 @@ def plot_TS_Periodo(T, L, L_err, title1, title2, mode, save=True, fit=False, ord
     oscillation_freq = 24*60/5.4
     
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=[15, 4])
-    if len(L_err)!=0:
-        model_poly = np.poly1d(np.polyfit(T, L, order, w=1/L_err**2))
-    else:
-        model_poly = np.poly1d(np.polyfit(T, L, order))
-    model_x = np.linspace(min(T), max(T), N)
     
     if len(L_err)!=0:
         ax1.errorbar(T, L, yerr=L_err, fmt='.', label='Data')
     else:
         ax1.plot(T, L, '.', label='Data')
-    if fit:
-        print(model_poly)
-        ax1.plot(model_x, model_poly(model_x), 'r', label=str(order)+'th order polynomial fit')
+        
     ax1.set_xlabel('Time (MJD)')
     ax1.set_ylabel(title1)
     ax1.set_title(title2+' Time Series '+mode)
     if fit:
+        if len(L_err)!=0:
+            model_poly = np.poly1d(np.polyfit(T, L, order, w=1/L_err**2))
+        else:
+            model_poly = np.poly1d(np.polyfit(T, L, order))
+        model_x = np.linspace(min(T), max(T), N)
+        print(model_poly)
+        ax1.plot(model_x, model_poly(model_x), 'r', label=str(order)+'th order polynomial fit')
         ax1.legend()
 
     Periodo = LombScargle(T, L).autopower(nyquist_factor=1)
