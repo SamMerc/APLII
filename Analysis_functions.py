@@ -7,7 +7,7 @@ from astropy import units as u
 from scipy.optimize import curve_fit
 from astropy.timeseries import LombScargle
 from scipy.special import voigt_profile
-
+from scipy import stats
 
 def extraction(file_directory, blaze_directory, CCF_directory, order):
     '''
@@ -37,6 +37,8 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
     :param total_FWHM_err: nested array, containing the error on the FWHM for the CCF of each spectrum.
     :param total_BIS_SPAN: nested array, containing the Bisector Span values for the CCF of each spectrum.
     :param total_BIS_SPAN_err: nested array, containing the error on the Bisector Span for the CCF of each spectrum.
+    :param total_CONTRAST: nested array, containing the Contrast values for the CCF of each spectrum.
+    :param total_CONTRAST_err: nested array, containing the error on the Contrast for the CCF of each spectrum.
     :param total_H2O: nested array, containing the integrated column density of H2O for each spectrum.
     :param total_H2O_err: nested array, containing the error on the integrated column density of H2O for each spectrum.
     :param total_O2: nested array, containing the integrated column density of O2 for each spectrum.
@@ -86,6 +88,12 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
     #Contains the error on the Bisector span of the CCF of the spectra.
     total_BIS_SPAN_err = np.zeros((len(os.listdir(file_directory))))
     
+    #Contains the Contrast of the CCF of the spectra.
+    total_CONTRAST = np.zeros((len(os.listdir(file_directory))))
+    
+    #Contains the error on the Contrast of the CCF of the spectra.
+    total_CONTRAST_err = np.zeros((len(os.listdir(file_directory))))
+
     #Contains the integrated column density of H2O, CO2 and O2 at the time of acquisition of the spectra.
     total_H2O = np.zeros((len(os.listdir(file_directory))))
     total_O2 = np.zeros((len(os.listdir(file_directory))))
@@ -133,6 +141,10 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
         #Getting the error and value on the Bisector Span.
         total_BIS_SPAN[i] = file_CCF[0].header['HIERARCH ESO QC CCF BIS SPAN']
         total_BIS_SPAN_err[i] = file_CCF[0].header['HIERARCH ESO QC CCF BIS SPAN ERROR']
+
+        #Getting the error and value on the Contrast.
+        total_CONTRAST[i] = file_CCF[0].header['HIERARCH ESO QC CCF CONTRAST']
+        total_CONTRAST_err[i] = file_CCF[0].header['HIERARCH ESO QC CCF CONTRAST ERROR']
         
         #Getting the airmass .
         total_AIRM[i] = (file[0].header['HIERARCH ESO TEL AIRM START'] + file[0].header['HIERARCH ESO TEL AIRM END'])/2
@@ -209,7 +221,7 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
             total_norm_spctr[i] = total_spctr[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
             total_norm_err[i] = total_err[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
 
-    return total_lamda, total_spctr, total_norm_spctr, total_err, total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM
+    return total_lamda, total_spctr, total_norm_spctr, total_err, total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM
 
 
 
@@ -611,3 +623,43 @@ def SNR_calculator(low, high, tot_lamda, tot_spctr, tot_err):
         measured_SNR[h] = avg/std
         
     return measured_SNR
+
+def Correlation_Plot(A, B, A_err, B_err, titleA, titleB, title, day, save=True):
+    '''
+    Function to create a correlation plot between two arrays A and B.
+    Parameters
+    ----------
+    :param A: array, values to plot on x-axis.
+    :param B: array, values to plot on y-axis.
+    :param A_err: array, containing error on the values contained in A.
+    :param B_err: array, containing error on the values contained in B. 
+    :param titleA: string, title for the x-axis.
+    :param titleB: string, title for the y-axis.
+    :param title: string, title for the plot.
+    Returns
+    :param measured_SNR: array, containing the calculated SNR values for all the spectrum.
+    ----------
+    '''
+    fig, ax = plt.subplots(1, 1, figsize=[7, 4])
+    
+    if len(A_err)!=0 and len(B_err)!=0:
+        ax.errorbar(A, B, xerr=A_err, yerr=B_err, fmt='.')
+    elif len(A_err)==0 and len(B_err)!=0:
+        ax.errorbar(A, B, yerr=B_err, fmt='.')
+    elif len(A_err)!=0 and len(B_err)==0:
+        ax.errorbar(A, B, xerr=A_err, fmt='.')
+    else:
+        ax.plot(A, B, '.')
+        
+    ax.set_xlabel(titleA)
+    ax.set_ylabel(titleB)
+    ax.set_title(title+' correlation for '+day)
+    
+    textstr = '\n'.join((r"$r_P = %.3f$" % (np.corrcoef(A, B)[0][1], ), 
+                        r"$r_S = %.3f$" % (stats.spearmanr(A, B).correlation, )))
+    ax.text(0.79, 0.80, textstr, transform=ax.transAxes, fontsize=12, bbox = dict(facecolor='white', alpha=0.5))
+    if save:
+        plt.savefig('/Users/samsonmercier/Desktop/'+title+'-'+day[-2:]+'.pdf')
+    
+
+    
