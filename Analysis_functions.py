@@ -624,7 +624,7 @@ def SNR_calculator(low, high, tot_lamda, tot_spctr, tot_err):
         
     return measured_SNR
 
-def Correlation_Plot(A, B, A_err, B_err, titleA, titleB, title, day, save=True):
+def Correlation_Plot(mode, A, B, A_err, B_err, titleA, titleB, title, day, save=True):
     '''
     Function to create a correlation plot between two arrays A and B.
     Parameters
@@ -640,26 +640,76 @@ def Correlation_Plot(A, B, A_err, B_err, titleA, titleB, title, day, save=True):
     :param measured_SNR: array, containing the calculated SNR values for all the spectrum.
     ----------
     '''
-    fig, ax = plt.subplots(1, 1, figsize=[7, 4])
-    
-    if len(A_err)!=0 and len(B_err)!=0:
-        ax.errorbar(A, B, xerr=A_err, yerr=B_err, fmt='.')
-    elif len(A_err)==0 and len(B_err)!=0:
-        ax.errorbar(A, B, yerr=B_err, fmt='.')
-    elif len(A_err)!=0 and len(B_err)==0:
-        ax.errorbar(A, B, xerr=A_err, fmt='.')
-    else:
-        ax.plot(A, B, '.')
+    if np.sum(mode=='A') != len(mode) and np.sum(mode=='E')!= len(mode):
         
-    ax.set_xlabel(titleA)
-    ax.set_ylabel(titleB)
-    ax.set_title(title+' correlation for '+day)
-    
-    textstr = '\n'.join((r"$r_P = %.3f$" % (np.corrcoef(A, B)[0][1], ), 
-                        r"$r_S = %.3f$" % (stats.spearmanr(A, B).correlation, )))
-    ax.text(0.79, 0.80, textstr, transform=ax.transAxes, fontsize=12, bbox = dict(facecolor='white', alpha=0.5))
-    if save:
-        plt.savefig('/Users/samsonmercier/Desktop/'+title+'-'+day[-2:]+'.pdf')
-    
+        A_HA = A[mode=='A']
+        A_HE = A[mode=='E']
+        
+        B_HA = B[mode=='A']
+        B_HE = B[mode=='E']
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=[15, 4], sharey=True)
+
+        if len(A_err)!=0 and len(B_err)!=0:
+            A_err_HA = A_err[mode=='A']
+            A_err_HE = A_err[mode=='E']
+            B_err_HA = B_err[mode=='A']
+            B_err_HE = B_err[mode=='E']
+            ax1.errorbar(A_HA, B_HA, xerr=A_err_HA, yerr=B_err_HA, fmt='b.')
+            ax2.errorbar(A_HE, B_HE, xerr=A_err_HE, yerr=B_err_HE, fmt='g.')
+            
+        elif len(A_err)==0 and len(B_err)!=0:
+            B_err_HA = B_err[mode=='A']
+            B_err_HE = B_err[mode=='E']
+            ax1.errorbar(A_HA, B_HA, yerr=B_err_HA, fmt='b.')
+            ax2.errorbar(A_HE, B_HE, yerr=B_err_HE, fmt='g.')
+        elif len(A_err)!=0 and len(B_err)==0:
+            A_err_HA = A_err[mode=='A']
+            A_err_HE = A_err[mode=='E']
+            ax1.errorbar(A_HA, B_HA, xerr=A_err_HA, fmt='b.')
+            ax2.errorbar(A_HE, B_HE, xerr=A_err_HE, fmt='g.')
+        else:
+            ax1.plot(A_HA, B_HA, 'b.')
+            ax2.plot(A_HE, B_HE, 'g.')
+
+        ax1.set_xlabel(titleA)
+        ax2.set_xlabel(titleA)
+        ax1.set_ylabel(titleB)
+        ax1.set_title(title+' correlation for '+day+' (HA)')
+        ax2.set_title(title+' correlation for '+day+' (HE)')
+
+        textstr_HA = '\n'.join((r"$r_P = %.3f$" % (np.corrcoef(A_HA, B_HA)[0][1], ), 
+                            r"$r_S = %.3f$" % (stats.spearmanr(A_HA, B_HA).correlation, )))
+        ax1.text(0.79, 0.80, textstr_HA, transform=ax1.transAxes, fontsize=12, bbox = dict(facecolor='white', alpha=0.5))
+        
+        textstr_HE = '\n'.join((r"$r_P = %.3f$" % (np.corrcoef(A_HE, B_HE)[0][1], ), 
+                            r"$r_S = %.3f$" % (stats.spearmanr(A_HE, B_HE).correlation, )))
+        ax2.text(0.79, 0.80, textstr_HE, transform=ax2.transAxes, fontsize=12, bbox = dict(facecolor='white', alpha=0.5))
+        
+        if save:
+            plt.savefig('/Users/samsonmercier/Desktop/Correlation-'+day[-2:]+'/'+title+'-'+day[-2:]+'.pdf')
+
+    else:
+        fig, ax = plt.subplots(1, 1, figsize=[7, 4])
+
+        if len(A_err)!=0 and len(B_err)!=0:
+            ax.errorbar(A, B, xerr=A_err, yerr=B_err, fmt='.')
+        elif len(A_err)==0 and len(B_err)!=0:
+            ax.errorbar(A, B, yerr=B_err, fmt='.')
+        elif len(A_err)!=0 and len(B_err)==0:
+            ax.errorbar(A, B, xerr=A_err, fmt='.')
+        else:
+            ax.plot(A, B, '.')
+
+        ax.set_xlabel(titleA)
+        ax.set_ylabel(titleB)
+        ax.set_title(title+' correlation for '+day)
+
+        textstr = '\n'.join((r"$r_P = %.3f$" % (np.corrcoef(A, B)[0][1], ), 
+                            r"$r_S = %.3f$" % (stats.spearmanr(A, B).correlation, )))
+        ax.text(0.79, 0.80, textstr, transform=ax.transAxes, fontsize=12, bbox = dict(facecolor='white', alpha=0.5))
+        if save:
+            plt.savefig('/Users/samsonmercier/Desktop/'+title+'-'+day[-2:]+'.pdf')
+
 
     
