@@ -4,10 +4,13 @@ import astropy.io.fits as pf
 import os
 from astropy.modeling import models
 from astropy import units as u
+from specutils import Spectrum1D
+from specutils.analysis import equivalent_width
 from scipy.optimize import curve_fit
 from astropy.timeseries import LombScargle
 from scipy.special import voigt_profile
 from scipy import stats
+from scipy.integrate import simpson
 
 def extraction(file_directory, blaze_directory, CCF_directory, order):
     '''
@@ -493,7 +496,7 @@ def fit_spctr_line(fit_func, eval_func, low_lim, up_lim, ini_guess, guess_bounds
     '''
 
     #Initializing the arrays containing the best-fit parameters and the errors on them.
-    thetas = np.ones((len(y), len(ini_guess)))
+    thetas = np.ones((len(y), len(ini_guess)+1))
     err = np.ones((len(y), len(ini_guess)))
 
     #Looping over all the arrays(/spectra).
@@ -512,9 +515,14 @@ def fit_spctr_line(fit_func, eval_func, low_lim, up_lim, ini_guess, guess_bounds
         else:
             params, cov = curve_fit(fit_func, bound_x, bound_y, p0 = ini_guess, bounds = guess_bounds)
         #Extracting the best-fit parameters and the error on the best-fit parameters.
-        thetas[i] = params
+        thetas[i][:-1] = params
         err[i] = np.sqrt(np.diag(cov))
         
+        #Getting the equivalent width 
+        spectrum_obj = Spectrum1D(flux = bound_y*u.Jy, spectral_axis = bound_x*u.AA)
+        eq_width = equivalent_width(spectrum_obj)
+
+        thetas[i][-1] = eq_width.value
         #Creating the best-fit model for plotting purposes.
         model = eval_func(bound_x, params)
 
@@ -629,6 +637,7 @@ def Correlation_Plot(mode, A, B, A_err, B_err, titleA, titleB, title, day, save=
     Function to create a correlation plot between two arrays A and B.
     Parameters
     ----------
+    :param mode: array, used to divide the data based on the mode of observation used.
     :param A: array, values to plot on x-axis.
     :param B: array, values to plot on y-axis.
     :param A_err: array, containing error on the values contained in A.
@@ -712,4 +721,217 @@ def Correlation_Plot(mode, A, B, A_err, B_err, titleA, titleB, title, day, save=
             plt.savefig('/Users/samsonmercier/Desktop/'+title+'-'+day[-2:]+'.pdf')
 
 
+def new_extraction(file_directory, blaze_directory, CCF_directory, order):
+    '''
+    Function to extract the important quantities from the FITS files for a given day of solar observations.
+    Parameters
+    ----------
+    :param file_directory: string, name of directory containing the spectral FITS files for a given day of solar observations.
+    :param blaze_directory: string, name of directory containing the blaze FITS files for a given day of solar observations.
+    Generally, there will be one or two files depending on the number of modes of observation.
+    :param CCF_directory: string, name of directory containing the CCF FITS files for a given day of solar observations.
+    THese files contain information about the RV of each spectrum.
+    :param order: int, order of the Échelle spectrograph we want to use.
+    Returns
+    ----------
+    :param total_lamda: nested array, containing list of wavelengths for each spectrum, for the given order.
+    :param total_spctr: nested array, containing list of flux values for each spectrum, for the given order.
+    :param total_norm_spctr: nested array, containing list of normalized flux values for each spectrum, for the given order.
+    :param total_err: nested array, containing list of errors on the flux values for each spectrum, for the given order.
+    :param total_norm_err: nested array, containing list of errors on the normalized flux values for each spectrum, 
+    for the given order.
+    :param total_SNR: nested array, containing the SNR value for each spectrum, for the given order.
+    :param mode: nested array, containing the mode of observation for each spectrum.
+    :param date: nested array, containing timestamp of acquisition for each spectrum.
+    :param total_RV: nested array, containing the RV values for each spectrum, obtained with a CCF.
+    :param total_RV_err: nested array, containing the error on the RV values for each spectrum, obtained with a CCF.
+    :param total_FWHM: nested array, containing the FWHM values for the CCF of each spectrum.
+    :param total_FWHM_err: nested array, containing the error on the FWHM for the CCF of each spectrum.
+    :param total_BIS_SPAN: nested array, containing the Bisector Span values for the CCF of each spectrum.
+    :param total_BIS_SPAN_err: nested array, containing the error on the Bisector Span for the CCF of each spectrum.
+    :param total_CONTRAST: nested array, containing the Contrast values for the CCF of each spectrum.
+    :param total_CONTRAST_err: nested array, containing the error on the Contrast for the CCF of each spectrum.
+    :param total_H2O: nested array, containing the integrated column density of H2O for each spectrum.
+    :param total_H2O_err: nested array, containing the error on the integrated column density of H2O for each spectrum.
+    :param total_O2: nested array, containing the integrated column density of O2 for each spectrum.
+    :param total_O2_err: nested array, containing the error on the integrated column density of O2 for each spectrum.    
+    :param total_CO2: nested array, containing the integrated column density of CO2 for each spectrum.
+    :param total_CO2_err: nested array, containing the error on the integrated column density of CO2 for each spectrum.    
+    :param total_AIRM: nested array, containing the airmass at the time of observation for each spectrum.
+    '''
     
+    #Initialize the arrays.
+    #Contains the wavelength for the order of interest for the spectra.
+    total_lamda = np.zeros((len(os.listdir(file_directory)), 4084))
+    
+    #Contains the flux and normalized values of the spectra of the order of interest.
+    total_spctr = np.zeros((len(os.listdir(file_directory)), 4084))
+    total_norm_spctr = np.zeros((len(os.listdir(file_directory)), 4084))
+    
+    #Contains the error on the flux and normalized flux values of the spectra.
+    total_err = np.zeros((len(os.listdir(file_directory)), 4084))
+    total_norm_err = np.zeros((len(os.listdir(file_directory)), 4084))
+    
+    #Contains the SNR value of the spectra.
+    total_SNR = np.zeros((len(os.listdir(file_directory))))
+    
+    #Contains the mode of each spectrum.
+    mode = np.zeros((len(os.listdir(file_directory))), dtype=str)
+    
+    #Contains the timestamp at which each spectrum was collected (?).
+    date = np.zeros((len(os.listdir(file_directory))))
+    
+    #Contains the RV values of the spectra.
+    #The RV values are obtained with a CCF routine, that has been TC.
+    total_RV = np.zeros((len(os.listdir(file_directory))))
+    
+    #Error on the RV values of the spectra.
+    total_RV_err = np.zeros((len(os.listdir(file_directory))))
+    
+    #Contains the FWHM of the CCF of the spectra.
+    total_FWHM = np.zeros((len(os.listdir(file_directory))))
+    
+    #Contains the error on the FWHM of the CCF of the spectra.
+    total_FWHM_err = np.zeros((len(os.listdir(file_directory))))
+    
+    #Contains the Bisector span of the CCF of the spectra.
+    total_BIS_SPAN = np.zeros((len(os.listdir(file_directory))))
+    
+    #Contains the error on the Bisector span of the CCF of the spectra.
+    total_BIS_SPAN_err = np.zeros((len(os.listdir(file_directory))))
+    
+    #Contains the Contrast of the CCF of the spectra.
+    total_CONTRAST = np.zeros((len(os.listdir(file_directory))))
+    
+    #Contains the error on the Contrast of the CCF of the spectra.
+    total_CONTRAST_err = np.zeros((len(os.listdir(file_directory))))
+
+    #Contains the integrated column density of H2O, CO2 and O2 at the time of acquisition of the spectra.
+    total_H2O = np.zeros((len(os.listdir(file_directory))))
+    total_O2 = np.zeros((len(os.listdir(file_directory))))
+    total_CO2 = np.zeros((len(os.listdir(file_directory))))
+    
+    #Contains the error on the integrated column density of H2O, CO2 and O2 at the time of acquisition of the spectra.
+    total_H2O_err = np.zeros((len(os.listdir(file_directory))))
+    total_O2_err = np.zeros((len(os.listdir(file_directory))))
+    total_CO2_err = np.zeros((len(os.listdir(file_directory))))
+
+    #Contains the airmass at the time of observation of each spectrum.
+    total_AIRM = np.zeros((len(os.listdir(file_directory))))
+    
+    #Defining the Sun's BB for later.
+    Sun_BB = models.BlackBody(temperature = 5778*u.K)
+
+    #Initial mode analysis to see the modes used in the data.
+    for i in range(len(os.listdir(file_directory))):
+        file = pf.open(file_directory+'/'+sorted(os.listdir(file_directory))[i])
+        mode[i] = file[0].header['HIERARCH ESO INS MODE'][1]
+    
+    #Loop over all the files in the directory and populate the arrays.
+    for i in range(len(os.listdir(file_directory))):
+        #Opening the files in the directories.
+        file = pf.open(file_directory+'/'+sorted(os.listdir(file_directory))[i])
+        file_CCF = pf.open(CCF_directory +'/'+sorted(os.listdir(CCF_directory))[i])
+        
+        #Extracting the wavelength.
+        total_lamda[i] = file[4].data[order]
+
+        #Extracting the DLL for spectrum correction - only used later.
+        file_DLL = file[6].data[order]
+        
+        #Extracting the timestamp of each spectra.
+        date[i] = file[0].header['MJD-OBS']
+
+        #Getting the RV and error on the RV from the CCF files.
+        total_RV[i] = file_CCF[0].header['HIERARCH ESO QC CCF RV']
+        total_RV_err[i] = file_CCF[0].header['HIERARCH ESO QC CCF RV ERROR']
+        
+        #Getting the error and value on the FWHM.
+        total_FWHM[i] = file_CCF[0].header['HIERARCH ESO QC CCF FWHM']
+        total_FWHM_err[i] = file_CCF[0].header['HIERARCH ESO QC CCF FWHM ERROR']
+        
+        #Getting the error and value on the Bisector Span.
+        total_BIS_SPAN[i] = file_CCF[0].header['HIERARCH ESO QC CCF BIS SPAN']
+        total_BIS_SPAN_err[i] = file_CCF[0].header['HIERARCH ESO QC CCF BIS SPAN ERROR']
+
+        #Getting the error and value on the Contrast.
+        total_CONTRAST[i] = file_CCF[0].header['HIERARCH ESO QC CCF CONTRAST']
+        total_CONTRAST_err[i] = file_CCF[0].header['HIERARCH ESO QC CCF CONTRAST ERROR']
+        
+        #Getting the airmass .
+        total_AIRM[i] = (file[0].header['HIERARCH ESO TEL AIRM START'] + file[0].header['HIERARCH ESO TEL AIRM END'])/2
+    
+        #Getting the error and value of the integrated column density for H2O, O2, CO2.
+        total_H2O[i] = file[0].header['HIERARCH ESO QC TELL H2O IWV']
+        total_H2O_err[i] = file[0].header['HIERARCH ESO QC TELL H2O IWV ERR']
+        total_O2[i] = file[0].header['HIERARCH ESO QC TELL O2 IWV']
+        total_O2_err[i] = file[0].header['HIERARCH ESO QC TELL O2 IWV ERR']
+        total_CO2[i] = file[0].header['HIERARCH ESO QC TELL CO2 IWV']
+        total_CO2_err[i] = file[0].header['HIERARCH ESO QC TELL CO2 IWV ERR']
+    
+        #Retrieving the SNR of each spectra at the order of interest.
+        total_SNR[i] = file[0].header['HIERARCH ESO QC ORDER'+str(order)+' SNR']
+        
+        #Getting the raw spectrum, that has bee Telluric-Corrected(TC).
+        file_spctr = file[1].data[order]
+        file_err = file[2].data[order]
+
+        #Distinguish two cases depending on the number of modes of observation.
+        #If there are two modes of observation.
+        if np.sum(mode=='A') != len(mode) and np.sum(mode=='E')!= len(mode):
+            #Looking through the Blaze directory to find the Blaze files for each observation mode.
+            for j in range(len(os.listdir(blaze_directory))):
+                file_blaze = pf.open(blaze_directory+'/'+os.listdir(blaze_directory)[j])
+                if file_blaze[0].header['HIERARCH ESO INS MODE'][1] == 'A':
+                    blaze_HA = file_blaze
+                else:
+                    blaze_HE = file_blaze
+                         
+            #Getting the Blaze spectra for each mode of observation.
+            blaze_HA_spctr = blaze_HA[1].data[order]
+            blaze_HE_spctr = blaze_HE[1].data[order]
+            
+            #Performing the Blaze correction -- the Blaze file used depends on the observation mode used.
+            if mode[i] == 'A':
+                BC_spctr = file_spctr/blaze_HA_spctr
+                BC_err = file_err/blaze_HA_spctr
+            else:
+                BC_spctr = file_spctr/blaze_HE_spctr
+                BC_err = file_err/blaze_HE_spctr
+
+            #Removing the trend of the spectrum's continuum using DLL and the Black Body of the Sun.
+            BC_DLL_spctr = BC_spctr/file_DLL
+            BC_DLL_err = BC_err/file_DLL
+            
+            total_spctr[i] = BC_DLL_spctr/Sun_BB(total_lamda[i]*u.AA).value
+            total_err[i] = BC_DLL_err/Sun_BB(total_lamda[i]*u.AA).value
+            
+            #Making the normalized spectra and error bars.
+            total_norm_spctr[i] = total_spctr[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
+            total_norm_err[i] = total_err[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
+                    
+        #If there is only one mode of observation.
+        else:
+            #Getting the blaze file.
+            blaze = pf.open(blaze_directory+'/'+os.listdir(blaze_directory)[0])
+            
+            #Getting the blaze spectra.
+            blaze_spctr = blaze[1].data[order]
+            
+            #Performing the Blaze correction.
+            BC_spctr = file_spctr/blaze_spctr
+            BC_err = file_err/blaze_spctr
+            
+            #Removing the trend of the spectrum's continuum using DLL and the Sun's Black Body spectrum.
+            BC_DLL_spctr = BC_spctr/file_DLL
+            BC_DLL_err = BC_err/file_DLL
+            
+            total_spctr[i] = BC_DLL_spctr/Sun_BB(file[4].data[order]*u.AA).value
+            total_err[i] = BC_DLL_err/Sun_BB(file[4].data[order]*u.AA).value
+            
+            #Making the normalized spectra and error bars.
+            total_norm_spctr[i] = total_spctr[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
+            total_norm_err[i] = total_err[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
+
+    return total_lamda, total_spctr, total_norm_spctr, total_err, total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM
+
