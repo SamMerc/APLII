@@ -417,22 +417,6 @@ def gaussian_L(x, A, offset, mu, std, lin):
     Gauss_l = (A * np.exp(-0.5*((x-mu)/std)**2)) + (lin*x+offset)
     return Gauss_l
 
-def eval_gaussian_L(x, params):
-    '''
-    Function describing a Gaussian with a linear trend that we can evaluate after the fit.
-    Parameters
-    ----------
-    :param x: array, values used to evaluate the linear-trend Gaussian.
-    :param params: array, containing the best-fit parameters.
-    Returns
-    ----------
-    :param Gauss_l: array, containing the linear-trend Gaussian values.
-    '''
-    A, offset, mu, std, lin = params
-    # Making the Gaussian distribution
-    Gauss_l = (A * np.exp(-0.5*((x-mu)/std)**2)) + (lin*x+offset)
-    return Gauss_l
-
 def Voigt(x, offset, depth, center, sig, gam):
     '''
     Function describing a Voigt profile we can fit to spectral lines.
@@ -452,25 +436,7 @@ def Voigt(x, offset, depth, center, sig, gam):
     voigt = offset-(depth*voigt_profile(x-center, sig, gam))
     return voigt
 
-
-def eval_Voigt(x, params):
-    '''
-    Function describing a Voigt profile we can evaluate after the fit.
-    Parameters
-    ----------
-    :param x: array, values used to evaluate the Voigt profile.
-    :param params: array, containing the best-fit parameters.
-    Returns
-    ----------
-    :param voigt: array, containing the Voigt profile values.
-    '''
-    offset, depth, center, sig, gam = params
-    #Making the Voigt profile
-    voigt = offset-(depth*voigt_profile(x-center, sig, gam))
-    return voigt
-
-
-def fit_spctr_line(fit_func, eval_func, low_lim, up_lim, ini_guess, guess_bounds, x, y, y_err, c):
+def fit_spctr_line(fit_func, low_lim, up_lim, ini_guess, guess_bounds, x, y, y_err, c, plot=True):
     '''
     Function to fit a function, fit_func, to a spectral line located in the wavelength range [low_lim, up_lim].
     We give as input a guess for the best-fit parameters and the acceptable bounds within which the algorithm
@@ -478,7 +444,6 @@ def fit_spctr_line(fit_func, eval_func, low_lim, up_lim, ini_guess, guess_bounds
     Parameters
     ----------
     :param fit_func: function, that we want to fit the spectral line with.
-    :param eval_func: function, same as the fit_func, but we use it to evaluate the fit (need to fix this).
     :param low_lim: float, lower limit of the wavelength range we want to consider.
     :param upper_lim: float, upper limit of the wavelength range we want to consider
     :param ini_guess: array, containing an initial guess/starting point for the best-fit parameter values.
@@ -524,20 +489,21 @@ def fit_spctr_line(fit_func, eval_func, low_lim, up_lim, ini_guess, guess_bounds
 
         thetas[i][-1] = eq_width.value
         #Creating the best-fit model for plotting purposes.
-        model = eval_func(bound_x, params)
+        model = fit_func(bound_x, *params)
 
         #Plotting the best-fit model on top of the data.
-        plt.figure(figsize=[8, 5])
-        if len(y_err)!=0:
-            plt.errorbar(bound_x, bound_y, yerr=bound_y_err,  fmt='b.', label='data')
-        else:
-            plt.plot(bound_x, bound_y, 'b.', label='data')
-        plt.plot(bound_x, model, c, label='Best-fit')
-        plt.xlabel('Wavelength ($\AA$)')
-        plt.ylabel('Normalized Flux')
-        plt.legend()
-        print(thetas[i])
-        plt.show()
+        if plot:
+            plt.figure(figsize=[8, 5])
+            if len(y_err)!=0:
+                plt.errorbar(bound_x, bound_y, yerr=bound_y_err,  fmt='b.', label='data')
+            else:
+                plt.plot(bound_x, bound_y, 'b.', label='data')
+            plt.plot(bound_x, model, c, label='Best-fit')
+            plt.xlabel('Wavelength ($\AA$)')
+            plt.ylabel('Normalized Flux')
+            plt.legend()
+            print(thetas[i])
+            plt.show()
 
     return thetas, err
 
