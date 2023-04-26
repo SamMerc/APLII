@@ -901,3 +901,6 @@ def new_extraction(file_directory, blaze_directory, CCF_directory, order):
 
     return total_lamda, total_spctr, total_norm_spctr, total_err, total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM
 
+def phasefold(t, T, nu):
+    A = (t-T)*nu
+    return A%1
