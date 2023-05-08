@@ -9,8 +9,9 @@ from specutils.analysis import equivalent_width
 from scipy.optimize import curve_fit
 from astropy.timeseries import LombScargle
 from scipy.special import voigt_profile
-from scipy import stats
-from scipy.integrate import simpson
+import itertools
+import scipy.odr as so
+import scipy.stats as ss
 
 def extraction(file_directory, blaze_directory, CCF_directory, order):
     '''
@@ -654,11 +655,11 @@ def Correlation_Plot(mode, A, B, A_err, B_err, titleA, titleB, title, day, save=
         ax2.set_title(title+' correlation for '+day+' (HE)')
 
         textstr_HA = '\n'.join((r"$r_P = %.3f$" % (np.corrcoef(A_HA, B_HA)[0][1], ), 
-                            r"$r_S = %.3f$" % (stats.spearmanr(A_HA, B_HA).correlation, )))
+                            r"$r_S = %.3f$" % (ss.spearmanr(A_HA, B_HA).correlation, )))
         ax1.text(0.79, 0.80, textstr_HA, transform=ax1.transAxes, fontsize=12, bbox = dict(facecolor='white', alpha=0.5))
         
         textstr_HE = '\n'.join((r"$r_P = %.3f$" % (np.corrcoef(A_HE, B_HE)[0][1], ), 
-                            r"$r_S = %.3f$" % (stats.spearmanr(A_HE, B_HE).correlation, )))
+                            r"$r_S = %.3f$" % (ss.spearmanr(A_HE, B_HE).correlation, )))
         ax2.text(0.79, 0.80, textstr_HE, transform=ax2.transAxes, fontsize=12, bbox = dict(facecolor='white', alpha=0.5))
         
         if save:
@@ -681,7 +682,7 @@ def Correlation_Plot(mode, A, B, A_err, B_err, titleA, titleB, title, day, save=
         ax.set_title(title+' correlation for '+day)
 
         textstr = '\n'.join((r"$r_P = %.3f$" % (np.corrcoef(A, B)[0][1], ), 
-                            r"$r_S = %.3f$" % (stats.spearmanr(A, B).correlation, )))
+                            r"$r_S = %.3f$" % (ss.spearmanr(A, B).correlation, )))
         ax.text(0.79, 0.80, textstr, transform=ax.transAxes, fontsize=12, bbox = dict(facecolor='white', alpha=0.5))
         if save:
             plt.savefig('/Users/samsonmercier/Desktop/'+title+'-'+day[-2:]+'.pdf')
@@ -902,5 +903,58 @@ def new_extraction(file_directory, blaze_directory, CCF_directory, order):
     return total_lamda, total_spctr, total_norm_spctr, total_err, total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM
 
 def phasefold(t, T, nu):
+    '''
+    Phase folding function.
+    Parameters
+    ----------
+    :param t: array, time values we want to phase fold.
+    :param T: float, reference time stamp used to phase fold.
+    :param nu: float, frequency of the phase folding.
+    Returns
+    :param ph_t: array, phase-folded time array. 
+    ----------
+    '''
+
     A = (t-T)*nu
-    return A%1
+    ph_t = A%1
+    return ph_t
+
+
+def eval_stat(best_fit_theta, x, y, fit_function, param_name):
+    '''
+    Function to evaluate the statistical significance of the results of a fit.
+    Parameters
+    ----------
+    :param best_fit_theta: array, best-fit parameters from the fit.
+    :param x: array, x values of data that are fit.
+    :param y: array, y values of data that are fit.
+    :param fit_function: function, used to fit the (x, y) data.
+    :param param_name: list, containing strings of the name of all the parameters in fit_function. 
+    Returns
+    ----------
+    '''
+    #Defining function to evaluate the best-fit
+    def f_wrapper_for_odr(beta, t):
+        return fit_function(t, *beta)
+
+    Model = so.odrpack.Model(f_wrapper_for_odr)
+    data = so.odrpack.Data(x, y)
+    myodr = so.odrpack.ODR(data, Model, beta0=best_fit_theta,  maxit=0)
+    myodr.set_job(fit_type=2)
+    parameterStatistics = myodr.run()
+    df_e = len(x) - len(best_fit_theta) # degrees of freedom
+    cov_beta = parameterStatistics.cov_beta # parameter covariance matrix from ODR
+    sd_beta = parameterStatistics.sd_beta * parameterStatistics.sd_beta
+    t_df = ss.t.ppf(0.95, df_e)
+    ci = []
+    for h in range(len(best_fit_theta)):
+        ci.append([best_fit_theta[h] - t_df * parameterStatistics.sd_beta[h], best_fit_theta[h] + t_df * parameterStatistics.sd_beta[h]])
+
+    tstat_beta = best_fit_theta / parameterStatistics.sd_beta # coeff t-statistics
+    pstat_beta = (1.0 - ss.t.cdf(np.abs(tstat_beta), df_e)) * 2.0    # coef. p-values
+
+    for j in range(len(best_fit_theta)):
+        print('parameter:', param_name[j]+':', best_fit_theta[j])
+        print('   95% conf interval:', ci[j][0], ci[j][1])
+        print('   tstat:', tstat_beta[j])
+        print('   pstat:', pstat_beta[j])
