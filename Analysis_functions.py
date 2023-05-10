@@ -677,10 +677,10 @@ def Correlation_Plot(mode, A, B, A_err, B_err, titleA, titleB, title, day, save=
         else:
             ax.plot(A, B, '.')
 
-        ax.set_xlabel(titleA)
-        ax.set_ylabel(titleB)
-        ax.set_title(title+' correlation for '+day)
-
+        ax.set_xlabel(titleA, color='white')
+        ax.set_ylabel(titleB, color='white')
+        ax.set_title(title+' correlation for '+day, color='white')
+        ax.tick_params(colors='white')
         textstr = '\n'.join((r"$r_P = %.3f$" % (np.corrcoef(A, B)[0][1], ), 
                             r"$r_S = %.3f$" % (ss.spearmanr(A, B).correlation, )))
         ax.text(0.79, 0.80, textstr, transform=ax.transAxes, fontsize=12, bbox = dict(facecolor='white', alpha=0.5))
