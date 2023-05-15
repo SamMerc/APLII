@@ -1,3 +1,4 @@
+#Importing libraries
 import numpy as np
 import matplotlib.pyplot as plt
 import astropy.io.fits as pf
@@ -9,7 +10,6 @@ from specutils.analysis import equivalent_width
 from scipy.optimize import curve_fit
 from astropy.timeseries import LombScargle
 from scipy.special import voigt_profile
-import itertools
 import scipy.odr as so
 import scipy.stats as ss
 
@@ -20,9 +20,8 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
     ----------
     :param file_directory: string, name of directory containing the spectral FITS files for a given day of solar observations.
     :param blaze_directory: string, name of directory containing the blaze FITS files for a given day of solar observations.
-    Generally, there will be one or two files depending on the number of modes of observation.
+    There will be one or two files depending on the number of modes of observation.
     :param CCF_directory: string, name of directory containing the CCF FITS files for a given day of solar observations.
-    THese files contain information about the RV of each spectrum.
     :param order: int, order of the Échelle spectrograph we want to use.
     Returns
     ----------
@@ -34,22 +33,22 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
     for the given order.
     :param total_SNR: nested array, containing the SNR value for each spectrum, for the given order.
     :param mode: nested array, containing the mode of observation for each spectrum.
-    :param date: nested array, containing timestamp of acquisition for each spectrum.
-    :param total_RV: nested array, containing the RV values for each spectrum, obtained with a CCF.
-    :param total_RV_err: nested array, containing the error on the RV values for each spectrum, obtained with a CCF.
+    :param date: nested array, containing timestamp of each spectrum.
+    :param total_RV: nested array, containing the RV values for each spectrum, obtained from the CCF.
+    :param total_RV_err: nested array, containing the error on the RV values for each spectrum, obtained from the CCF.
     :param total_FWHM: nested array, containing the FWHM values for the CCF of each spectrum.
     :param total_FWHM_err: nested array, containing the error on the FWHM for the CCF of each spectrum.
     :param total_BIS_SPAN: nested array, containing the Bisector Span values for the CCF of each spectrum.
     :param total_BIS_SPAN_err: nested array, containing the error on the Bisector Span for the CCF of each spectrum.
     :param total_CONTRAST: nested array, containing the Contrast values for the CCF of each spectrum.
     :param total_CONTRAST_err: nested array, containing the error on the Contrast for the CCF of each spectrum.
-    :param total_H2O: nested array, containing the integrated column density of H2O for each spectrum.
-    :param total_H2O_err: nested array, containing the error on the integrated column density of H2O for each spectrum.
-    :param total_O2: nested array, containing the integrated column density of O2 for each spectrum.
-    :param total_O2_err: nested array, containing the error on the integrated column density of O2 for each spectrum.    
-    :param total_CO2: nested array, containing the integrated column density of CO2 for each spectrum.
-    :param total_CO2_err: nested array, containing the error on the integrated column density of CO2 for each spectrum.    
-    :param total_AIRM: nested array, containing the airmass at the time of observation for each spectrum.
+    :param total_H2O: nested array, containing the integrated column density of H2O for each time of observation.
+    :param total_H2O_err: nested array, containing the error on the integrated column density of H2O for each time of observation.
+    :param total_O2: nested array, containing the integrated column density of O2 for each time of observation.
+    :param total_O2_err: nested array, containing the error on the integrated column density of O2 for each time of observation.   
+    :param total_CO2: nested array, containing the integrated column density of CO2 for each time of observation.
+    :param total_CO2_err: nested array, containing the error on the integrated column density of CO2 for each time of observation. 
+    :param total_AIRM: nested array, containing the airmass at the time of observation for each time of observation.
     '''
     
     #Initialize the arrays.
@@ -67,17 +66,16 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
     #Contains the SNR value of the spectra.
     total_SNR = np.zeros((len(os.listdir(file_directory))))
     
-    #Contains the mode of each spectrum.
+    #Contains the mode of the spectra.
     mode = np.zeros((len(os.listdir(file_directory))), dtype=str)
     
-    #Contains the timestamp at which each spectrum was collected (?).
+    #Contains the timestamp at which each spectrum was collected.
     date = np.zeros((len(os.listdir(file_directory))))
     
-    #Contains the RV values of the spectra.
-    #The RV values are obtained with a CCF routine, that has been TC.
+    #Contains the RV values of the spectra obtained from the CCF.
     total_RV = np.zeros((len(os.listdir(file_directory))))
     
-    #Error on the RV values of the spectra.
+    #Contains the error on the RV values of the spectra.
     total_RV_err = np.zeros((len(os.listdir(file_directory))))
     
     #Contains the FWHM of the CCF of the spectra.
@@ -111,10 +109,10 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
     #Contains the airmass at the time of observation of each spectrum.
     total_AIRM = np.zeros((len(os.listdir(file_directory))))
     
-    #Defining the Sun's BB for later.
+    #Defining the Sun's BB for reduction purposes.
     Sun_BB = models.BlackBody(temperature = 5778*u.K)
 
-    #Initial mode analysis to see the modes used in the data.
+    #Initial mode analysis to determine the modes used in the data.
     for i in range(len(os.listdir(file_directory))):
         file = pf.open(file_directory+'/'+sorted(os.listdir(file_directory))[i])
         mode[i] = file[0].header['HIERARCH ESO INS MODE'][1]
@@ -128,25 +126,25 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
         #Extracting the wavelength.
         total_lamda[i] = file[4].data[order]
 
-        #Extracting the DLL for spectrum correction - only used later.
+        #Extracting the DLL for spectrum correction.
         file_DLL = file[6].data[order]
         
         #Extracting the timestamp of each spectra.
         date[i] = file[0].header['MJD-OBS']
 
-        #Getting the RV and error on the RV from the CCF files.
+        #Getting the error and value of the RV from the CCF files.
         total_RV[i] = file_CCF[0].header['HIERARCH ESO QC CCF RV']
         total_RV_err[i] = file_CCF[0].header['HIERARCH ESO QC CCF RV ERROR']
         
-        #Getting the error and value on the FWHM.
+        #Getting the error and value of the FWHM.
         total_FWHM[i] = file_CCF[0].header['HIERARCH ESO QC CCF FWHM']
         total_FWHM_err[i] = file_CCF[0].header['HIERARCH ESO QC CCF FWHM ERROR']
         
-        #Getting the error and value on the Bisector Span.
+        #Getting the error and value of the Bisector Span.
         total_BIS_SPAN[i] = file_CCF[0].header['HIERARCH ESO QC CCF BIS SPAN']
         total_BIS_SPAN_err[i] = file_CCF[0].header['HIERARCH ESO QC CCF BIS SPAN ERROR']
 
-        #Getting the error and value on the Contrast.
+        #Getting the error and value of the Contrast.
         total_CONTRAST[i] = file_CCF[0].header['HIERARCH ESO QC CCF CONTRAST']
         total_CONTRAST_err[i] = file_CCF[0].header['HIERARCH ESO QC CCF CONTRAST ERROR']
         
@@ -191,14 +189,14 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
                 BC_spctr = file_spctr/blaze_HE_spctr
                 BC_err = file_err/blaze_HE_spctr
 
-            #Removing the trend of the spectrum's continuum using DLL and the Black Body of the Sun.
+            #Removing the downward trend of the spectrum's continuum using DLL and the Black Body of the Sun.
             BC_DLL_spctr = BC_spctr/file_DLL
             BC_DLL_err = BC_err/file_DLL
             
             total_spctr[i] = BC_DLL_spctr/Sun_BB(total_lamda[i]*u.AA).value
             total_err[i] = BC_DLL_err/Sun_BB(total_lamda[i]*u.AA).value
             
-            #Making the normalized spectra and error bars.
+            #Making the normalized spectra and error bars. -- re-make with Rassine
             total_norm_spctr[i] = total_spctr[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
             total_norm_err[i] = total_err[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
                     
@@ -218,8 +216,8 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
             BC_DLL_spctr = BC_spctr/file_DLL
             BC_DLL_err = BC_err/file_DLL
             
-            total_spctr[i] = BC_DLL_spctr/Sun_BB(file[4].data[order]*u.AA).value
-            total_err[i] = BC_DLL_err/Sun_BB(file[4].data[order]*u.AA).value
+            total_spctr[i] = BC_DLL_spctr/Sun_BB(total_lamda[i]*u.AA).value
+            total_err[i] = BC_DLL_err/Sun_BB(total_lamda[i]*u.AA).value
             
             #Making the normalized spectra and error bars.
             total_norm_spctr[i] = total_spctr[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
@@ -229,7 +227,7 @@ def extraction(file_directory, blaze_directory, CCF_directory, order):
 
 
 
-def segment_and_reduce(modes, SNR, L, RV, airmass, sigma_coeff_SNR, sigma_coeff_RV=20):
+def segment_and_reduce(modes, SNR, L, RV, airmass, sigma_coeff_SNR, airmass_limit = 2, sigma_coeff_RV=20):
     '''
     Function to remove the data for the spectra with low SNR and separate
     the data based on the mode of observation used.
@@ -241,6 +239,9 @@ def segment_and_reduce(modes, SNR, L, RV, airmass, sigma_coeff_SNR, sigma_coeff_
     See the possible quantities output by the extraction function.
     :param RV: nested array, containing the RV values from the CCF for each observation.
     :param airmass: array, containing the airmass values for each time of observation.
+    :param sigma_coeff_SNR: int, acceptance parameter used in our SNR clipping method.
+    :param airmass_limit: float, limiting airmass above which observations are discarded.
+    :param sigma_coeff_RV: int, used in the RV sigma clipping method described below.
     Returns
     ----------
     :param L_HA: nested array, containing the data observed with the observation mode HA,
@@ -251,25 +252,36 @@ def segment_and_reduce(modes, SNR, L, RV, airmass, sigma_coeff_SNR, sigma_coeff_
     '''
     
     #We only select the observations with favorable airmass
-    L = L[airmass<2]
-    RV = RV[airmass<2]
-    SNR = SNR[airmass<2]
-    modes = modes[airmass<2]
+    L = L[airmass<airmass_limit]
+    RV = RV[airmass<airmass_limit]
+    SNR = SNR[airmass<airmass_limit]
+    modes = modes[airmass<airmass_limit]
+    
+    #Array containing the indices of the flagged SNR values. These flagged indices will them be discarded from 
+    #the array of interest, L.
     flag = []
 
     #Removing SNR outliers 
+    #Define a measure of the spread. We use IQR since we are using the median as a measure of our data's central value.
     IQR = np.percentile(np.diff(SNR), 75)-np.percentile(np.diff(SNR), 25)
+
+    #Looping over all the SNR values. We look at the difference between neighbouring points. In doing so, we hope to 
+    #detect large fluctuations in the SNR.
     for i in range(len(np.diff(SNR))):
+        #We flag indices only if their SNR difference is above a certain threshold, to avoid removing SNR values in a SNR chain.
+        #A SNR chain is a sequence of points at very similar SNR values. During a night of observation, the SNR can jump from one
+        #chain to another. What we want to remove is not these chains, but the random SNR outliers inside the chains.
         if np.abs(np.diff(SNR)[i]/np.median(np.diff(SNR))) > sigma_coeff_SNR*IQR:
             flag.append(i+1)
     
+    #We remove the flagged indices from the SNR, mode, RV and L arrays.
     new_SNR = np.delete(SNR, flag[:-1], axis=0)
     new_L = np.delete(L, flag[:-1], axis=0)
 
     new_RV = np.delete(RV, flag[:-1], axis=0)
     new_modes = np.delete(modes, flag[:-1], axis=0)
     
-    #Distinguish two cases depending on the number of modes of observation
+    #Distinguish two cases depending on the number of modes of observation.
     #If there are two modes of observation.
     if np.sum(modes=='A') != len(modes) and np.sum(modes=='E')!= len(modes): 
         #We separate the spectra and their RV values based on their observing mode.
@@ -279,20 +291,18 @@ def segment_and_reduce(modes, SNR, L, RV, airmass, sigma_coeff_SNR, sigma_coeff_
         RV_HA = new_RV[new_modes=='A']
         RV_HE = new_RV[new_modes=='E']
 
-        #We remove spectra and their RV values with SNR lower than the cutoff value. 
         SNR_HA = new_SNR[new_modes=='A']
         SNR_HE = new_SNR[new_modes=='E']
     
-        #We remove the spectra with outlier RV values
+        #We remove the spectra with outlier RV values.
         L_HA = RV_clip(RV_HA, L_HA, sigma_coeff_RV)
         L_HE = RV_clip(RV_HE, L_HE, sigma_coeff_RV)
 
         return L_HA, L_HE
     #If there is one mode of observation.
     else:
-        #We remove the spectra with outlier RV values
+        #We remove the spectra with outlier RV values.
         L_new_new = RV_clip(new_RV, new_L, sigma_coeff_RV)
-
         return L_new_new
 
     
@@ -305,6 +315,7 @@ def RV_clip(RV, L, sig):
     :param RV: array, containing the RV data along which we look for outliers.
     :param L: array, containing the data we are interested in and whose elements we will remove 
     if they are associated to outlier RV data points.
+    :param sig:int, sigma clipping value. Number of sigma away from the average value that are accepted.
     Returns
     ----------
     :param L: array, containing the array L with the elements associated to outlier RV values removed.
@@ -317,11 +328,12 @@ def RV_clip(RV, L, sig):
     
     #Scanning the RV array for outliers
     for i in range(len(RV)):
-        if RV[i] > (1+sig*IQR)*np.median(RV) or RV[i] < (1-sig*IQR)*np.median(RV):
+        if RV[i] > (1+sig*IQR)*np.abs(np.median(RV)) or RV[i] < (1-sig*IQR)*np.abs(np.median(RV)):
                 bad_indices.append(i)
-    
+
     #Removing the outliers
     L = np.delete(L, bad_indices, axis=0)
+    
     return L
         
         
@@ -375,7 +387,6 @@ def air2vac(wavelength):
     wavelength_vacuum = wavelength * n_vac
     return wavelength_vacuum
 
-
 def bound(low, high, ref_L, L):
     '''
     Function to select a range of values in list L, bounded by the values in ref_L.
@@ -399,6 +410,7 @@ def bound(low, high, ref_L, L):
     
     return temp3
 
+#Change the order of the parameters here and everywhere else in the other codes
 def gaussian_L(x, A, offset, mu, std, lin):
     '''
     Function describing a Gaussian with a linear trend that we can fit to spectral lines.
@@ -420,7 +432,7 @@ def gaussian_L(x, A, offset, mu, std, lin):
 
 def Voigt(x, offset, depth, center, sig, gam):
     '''
-    Function describing a Voigt profile we can fit to spectral lines.
+    Function describing a Voigt profile.
     Parameters
     ----------
     :param x: array, values used to evaluate the Voigt profile.
@@ -437,9 +449,31 @@ def Voigt(x, offset, depth, center, sig, gam):
     voigt = offset-(depth*voigt_profile(x-center, sig, gam))
     return voigt
 
+#############################
+############HERE#############
+#############################
+
+def sinusoid(t, A, phase, offset, period):
+    '''
+    Function describing a basic sinusoidal.
+    Parameters
+    ----------
+    :param x: array, values used to evaluate the sinusoidal model.
+    :param A: float, amplitude of sinusoid.
+    :param phase: float, phase offset of the sinusoid.
+    :param offset: float, y-axis offset term.
+    :param period: float, period of the sinusoidal model.
+    Returns
+    ----------
+    :param sin_mod: array, containing the sinusoidal model values.
+    '''
+    sin_mod = offset+A*np.sin((2*np.pi*t/period) + phase)
+    return sin_mod
+    
+
 def fit_spctr_line(fit_func, low_lim, up_lim, ini_guess, guess_bounds, x, y, y_err, c, plot=True):
     '''
-    Function to fit a function, fit_func, to a spectral line located in the wavelength range [low_lim, up_lim].
+    Routine to fit a function, fit_func, to a spectral line located in the wavelength range [low_lim, up_lim].
     We give as input a guess for the best-fit parameters and the acceptable bounds within which the algorithm
     should search for the best-fit.
     Parameters
@@ -677,10 +711,9 @@ def Correlation_Plot(mode, A, B, A_err, B_err, titleA, titleB, title, day, save=
         else:
             ax.plot(A, B, '.')
 
-        ax.set_xlabel(titleA, color='white')
-        ax.set_ylabel(titleB, color='white')
-        ax.set_title(title+' correlation for '+day, color='white')
-        ax.tick_params(colors='white')
+        ax.set_xlabel(titleA)
+        ax.set_ylabel(titleB)
+        ax.set_title(title+' correlation for '+day)
         textstr = '\n'.join((r"$r_P = %.3f$" % (np.corrcoef(A, B)[0][1], ), 
                             r"$r_S = %.3f$" % (ss.spearmanr(A, B).correlation, )))
         ax.text(0.79, 0.80, textstr, transform=ax.transAxes, fontsize=12, bbox = dict(facecolor='white', alpha=0.5))
@@ -914,7 +947,6 @@ def phasefold(t, T, nu):
     :param ph_t: array, phase-folded time array. 
     ----------
     '''
-
     A = (t-T)*nu
     ph_t = A%1
     return ph_t
