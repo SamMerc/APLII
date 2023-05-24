@@ -467,7 +467,7 @@ def sinusoid(t, A, phase, offset, period):
     ----------
     :param sin_mod: array, containing the sinusoidal model values.
     '''
-    sin_mod = offset+A*np.sin((2*np.pi*t/period) + phase)
+    sin_mod = offset+A*np.sin((2*np.pi*t/period)+phase)
     return sin_mod
     
 
@@ -721,7 +721,7 @@ def Correlation_Plot(mode, A, B, A_err, B_err, titleA, titleB, title, day, save=
             plt.savefig('/Users/samsonmercier/Desktop/'+title+'-'+day[-2:]+'.pdf')
 
 
-def new_extraction(file_directory, blaze_directory, CCF_directory, order):
+def new_extraction(file_directory, blaze_directory, CCF_directory, telluric_directory, order):
     '''
     Function to extract the important quantities from the FITS files for a given day of solar observations.
     Parameters
@@ -730,7 +730,9 @@ def new_extraction(file_directory, blaze_directory, CCF_directory, order):
     :param blaze_directory: string, name of directory containing the blaze FITS files for a given day of solar observations.
     Generally, there will be one or two files depending on the number of modes of observation.
     :param CCF_directory: string, name of directory containing the CCF FITS files for a given day of solar observations.
-    THese files contain information about the RV of each spectrum.
+    These files contain information about the RV of each spectrum.
+    :param telluric_directory: string, name of directory containing the telluric FITS files for a given day of solar observations.
+    These files contain information about the telluric model used for the telluric correction.
     :param order: int, order of the Échelle spectrograph we want to use.
     Returns
     ----------
@@ -768,6 +770,9 @@ def new_extraction(file_directory, blaze_directory, CCF_directory, order):
     total_spctr = np.zeros((len(os.listdir(file_directory)), 4084))
     total_norm_spctr = np.zeros((len(os.listdir(file_directory)), 4084))
     
+    #Contains the flux of the telluric model of the order of interest.
+    total_telluric = np.zeros((len(os.listdir(file_directory)), 4084))
+
     #Contains the error on the flux and normalized flux values of the spectra.
     total_err = np.zeros((len(os.listdir(file_directory)), 4084))
     total_norm_err = np.zeros((len(os.listdir(file_directory)), 4084))
@@ -832,6 +837,10 @@ def new_extraction(file_directory, blaze_directory, CCF_directory, order):
         #Opening the files in the directories.
         file = pf.open(file_directory+'/'+sorted(os.listdir(file_directory))[i])
         file_CCF = pf.open(CCF_directory +'/'+sorted(os.listdir(CCF_directory))[i])
+        file_telluric = pf.open(telluric_directory +'/'+sorted(os.listdir(telluric_directory))[i])
+        
+        #Extracting the telluric model 
+        total_telluric[i] = file_telluric[6].data[order]
         
         #Extracting the wavelength.
         total_lamda[i] = file[4].data[order]
@@ -933,7 +942,7 @@ def new_extraction(file_directory, blaze_directory, CCF_directory, order):
             total_norm_spctr[i] = total_spctr[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
             total_norm_err[i] = total_err[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
 
-    return total_lamda, total_spctr, total_norm_spctr, total_err, total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM
+    return total_lamda, total_spctr, total_norm_spctr, total_err, total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM, total_telluric
 
 def phasefold(t, T, nu):
     '''
