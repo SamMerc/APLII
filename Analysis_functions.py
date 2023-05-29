@@ -467,7 +467,7 @@ def sinusoid(t, A, phase, offset, period):
     ----------
     :param sin_mod: array, containing the sinusoidal model values.
     '''
-    sin_mod = offset+A*np.sin((2*np.pi*t/period)+phase)
+    sin_mod = offset + A*np.sin((2*np.pi*t/period) + phase)
     return sin_mod
     
 
@@ -498,7 +498,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, ini_guess, guess_bounds, x, y, y_e
     #Initializing the arrays containing the best-fit parameters and the errors on them.
     thetas = np.ones((len(y), len(ini_guess)+1))
     err = np.ones((len(y), len(ini_guess)))
-
+    
     #Looping over all the arrays(/spectra).
     for i in range(len(x)):
         
