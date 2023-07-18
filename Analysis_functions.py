@@ -10,7 +10,9 @@ from specutils.analysis import equivalent_width
 from scipy.optimize import curve_fit
 from astropy.timeseries import LombScargle
 from scipy.special import voigt_profile
+from scipy.interpolate import interp1d
 import scipy.odr as so
+import pandas as pd
 import scipy.stats as ss
 
 def extraction(file_directory, blaze_directory, CCF_directory, order):
@@ -470,8 +472,61 @@ def sinusoid(t, A, phase, offset, period):
     sin_mod = offset + A*np.sin((2*np.pi*t/period) + phase)
     return sin_mod
     
+def equivalent_width_calculator(wavelength, flux_vals, flux_errs, N, cont_min, cont_max):
+    '''
+    Routine to calculate the equivalent width of a line.
+    Parameters
+    ----------
+    :param wavelength: array, wavelength range over which the line is present.
+    :param flux_vals: array, flux values over the considered wavelength range.
+    :param flux_errs: array, error on the flux values.
+    :param N: int, number of points to interpolate on for a better determination.
+    :param cont_min: float, minimum of wavelength range of the continuum.
+    :param cont_max: float, maximum of wavelength range of the continuum.
+    Returns
+    ----------
+    :param Eq_width: float, equivalent width of the line considered.
+    '''
+    #Intepolate line to have more points on the line
+    ref_wavelength = np.linspace(min(wavelength), max(wavelength), N)
+    
+    interpol_func_vals = interp1d(wavelength, flux_vals)
+    interpol_func_errs = interp1d(wavelength, flux_errs**2)
+    
+    interp_flux_vals = interpol_func_vals(ref_wavelength)
+    interp_flux_errs = np.sqrt(interpol_func_errs(ref_wavelength))
 
-def fit_spctr_line(fit_func, low_lim, up_lim, ini_guess, guess_bounds, x, y, y_err, c, plot=True):
+    #Defining the continuum and finding it's level
+    continuum_x = bound(cont_min, cont_max, ref_wavelength, ref_wavelength)
+    continuum_y = bound(cont_min, cont_max, ref_wavelength, interp_flux_vals)
+    continuum_y_err = bound(cont_min, cont_max, ref_wavelength, interp_flux_errs)
+
+    p = np.poly1d(np.polyfit(continuum_x, continuum_y, 0, w=1/continuum_y_err**2))
+    print(type(p[0]))
+    #Debugging
+    plt.figure(figsize=[8, 5])
+    plt.errorbar(wavelength, flux_vals, yerr=flux_errs, fmt='b--', label='Initial')
+    plt.errorbar(ref_wavelength, interp_flux_vals, yerr=interp_flux_errs, fmt='r.', label='Interpolated')
+    plt.axhline(p[0], color='k', linestyle='--', label='Continuum Level')
+    plt.xlabel('Wavelength ($\AA$)')
+    plt.ylabel('Normalized Flux')
+    plt.legend()
+    plt.show()
+    
+    #Approximating the equivalent width as the sum
+    Eq_width = 0.0
+    Eq_width_err = 0.0
+    
+    for i in range(1, len(ref_wavelength)):        
+        Eq_width += (ref_wavelength[i]-ref_wavelength[i-1]) * (p[0]-interp_flux_vals[i])
+        Eq_width_err += (ref_wavelength[i]-ref_wavelength[i-1])**2 * interp_flux_errs[i]**2
+        
+    Eq_width_err = np.sqrt(Eq_width_err)
+    
+    return Eq_width, Eq_width_err
+
+
+def fit_spctr_line(fit_func, low_lim, up_lim, ini_guess, guess_bounds, x, y, y_err, c, plot=True, N=100, cont_min=10831.5, cont_max=10832.5):
     '''
     Routine to fit a function, fit_func, to a spectral line located in the wavelength range [low_lim, up_lim].
     We give as input a guess for the best-fit parameters and the acceptable bounds within which the algorithm
@@ -489,6 +544,10 @@ def fit_spctr_line(fit_func, low_lim, up_lim, ini_guess, guess_bounds, x, y, y_e
     :param y_err: array, containing the error values on the data we want to fit.
     :param c: string, the color of the best-fit model when plotting.
     :param errors: bool, whether or not the error values are provided.
+    :param N: int, number of points to interpolate on for the equivalent width calculation.
+    :param cont_min: float, minimum of wavelength range of the continuum (for the equivalent width calculation). 
+    :param cont_max: float, maximum of wavelength range of the continuum (for the equivalent width calculation).
+
     Returns
     ----------
     :param thetas: array, containing best-fit parameters for the fit to each (x[i], y[i]) pair.
@@ -497,7 +556,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, ini_guess, guess_bounds, x, y, y_e
 
     #Initializing the arrays containing the best-fit parameters and the errors on them.
     thetas = np.ones((len(y), len(ini_guess)+1))
-    err = np.ones((len(y), len(ini_guess)))
+    err = np.ones((len(y), len(ini_guess)+1))
     
     #Looping over all the arrays(/spectra).
     for i in range(len(x)):
@@ -516,17 +575,23 @@ def fit_spctr_line(fit_func, low_lim, up_lim, ini_guess, guess_bounds, x, y, y_e
             params, cov = curve_fit(fit_func, bound_x, bound_y, p0 = ini_guess, bounds = guess_bounds)
         #Extracting the best-fit parameters and the error on the best-fit parameters.
         thetas[i][:-1] = params
-        err[i] = np.sqrt(np.diag(cov))
-        
-        #Getting the equivalent width 
-        spectrum_obj = Spectrum1D(flux = bound_y*u.Jy, spectral_axis = bound_x*u.AA)
-        eq_width = equivalent_width(spectrum_obj)
+        err[i][:-1] = np.sqrt(np.diag(cov))
 
-        thetas[i][-1] = eq_width.value
+        #Getting the equivalent width 
+        #spectrum_obj = Spectrum1D(flux = bound_y*u.Jy, spectral_axis = bound_x*u.AA)
+        #eq_width2 = equivalent_width(spectrum_obj)
+        
+        eq_width, eq_width_err = equivalent_width_calculator(bound_x, bound_y, bound_y_err, N, cont_min, cont_max)           
+
+        thetas[i][-1] = eq_width
+        err[i][-1] = eq_width_err
+        
+
         #Creating the best-fit model for plotting purposes.
         model = fit_func(bound_x, *params)
 
         #Plotting the best-fit model on top of the data.
+        
         if plot:
             plt.figure(figsize=[8, 5])
             if len(y_err)!=0:
@@ -537,7 +602,8 @@ def fit_spctr_line(fit_func, low_lim, up_lim, ini_guess, guess_bounds, x, y, y_e
             plt.xlabel('Wavelength ($\AA$)')
             plt.ylabel('Normalized Flux')
             plt.legend()
-            print(thetas[i])
+            for j in range(len(thetas[i])):
+                print(thetas[i][j], err[i][j])
             plt.show()
 
     return thetas, err
@@ -721,7 +787,7 @@ def Correlation_Plot(mode, A, B, A_err, B_err, titleA, titleB, title, day, save=
             plt.savefig('/Users/samsonmercier/Desktop/'+title+'-'+day[-2:]+'.pdf')
 
 
-def new_extraction(file_directory, blaze_directory, CCF_directory, telluric_directory, order):
+def new_extraction(file_directory, blaze_directory, CCF_directory, telluric_directory, rassine_directory, order, Rassine=False):
     '''
     Function to extract the important quantities from the FITS files for a given day of solar observations.
     Parameters
@@ -732,6 +798,7 @@ def new_extraction(file_directory, blaze_directory, CCF_directory, telluric_dire
     :param CCF_directory: string, name of directory containing the CCF FITS files for a given day of solar observations.
     These files contain information about the RV of each spectrum.
     :param telluric_directory: string, name of directory containing the telluric FITS files for a given day of solar observations.
+    :param rassine_directory: string, name of directory containing the RASSINE normalized spectra. 
     These files contain information about the telluric model used for the telluric correction.
     :param order: int, order of the Échelle spectrograph we want to use.
     Returns
@@ -938,11 +1005,35 @@ def new_extraction(file_directory, blaze_directory, CCF_directory, telluric_dire
             total_spctr[i] = BC_DLL_spctr/Sun_BB(file[4].data[order]*u.AA).value
             total_err[i] = BC_DLL_err/Sun_BB(file[4].data[order]*u.AA).value
             
-            #Making the normalized spectra and error bars.
-            total_norm_spctr[i] = total_spctr[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
             total_norm_err[i] = total_err[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
+           
+    #Making the normalized spectra and error bars.
+    #Making the master normalized spectrum.
+    if Rassine:
+        for name in os.listdir(rassine_directory+'/MASTER/'):
+            if name[:7] == 'RASSINE':
+                obj = pd.read_pickle(rassine_directory+'/MASTER/'+name)
+                norm_master_spctr = obj['flux']/obj['matching_diff']['continuum_linear']
+                master_wav = obj['wave']
 
-    return total_lamda, total_spctr, total_norm_spctr, total_err, total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM, total_telluric
+        #Extract the Rassine normalized spectra.
+        rassine_total_norm_spctr = np.zeros((int(len(os.listdir(rassine_directory+'/STACKED'))/2), len(master_wav)))
+        rassine_total_norm_err = np.zeros((int(len(os.listdir(rassine_directory+'/STACKED'))/2), len(master_wav)))
+        rassine_total_lamda = np.zeros((int(len(os.listdir(rassine_directory+'/STACKED'))/2), len(master_wav)))
+        for l in range(int(len(os.listdir(rassine_directory+'/STACKED'))/2)):
+            obj = pd.read_pickle(rassine_directory+'/STACKED/RASSINE_prepared_rassine_'+str(l)+'.p')
+            rassine_total_lamda[l] = obj['wave']
+            rassine_total_norm_spctr[l] = obj['flux']/obj['matching_diff']['continuum_linear']
+            interpol_err = interp1d(total_lamda[i], total_norm_err[i]**2)
+            rassine_total_norm_err[l] = np.sqrt(interpol_err(master_wav))
+    
+        return total_lamda, rassine_total_lamda, total_spctr, rassine_total_norm_spctr, total_err, rassine_total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM, total_telluric
+    else:
+        total_norm_spctr[i] = total_spctr[i]/np.average(total_spctr[i], weights = 1/total_err[i]**2)
+
+        return total_lamda, total_spctr, total_norm_spctr, total_err, total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM, total_telluric
+
+        
 
 def phasefold(t, T, nu):
     '''
