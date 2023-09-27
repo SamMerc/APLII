@@ -30,10 +30,11 @@ ref_wav_He_vacuum={'He1':10832.057472, 'He2':10833.216751, 'He3':10833.306444} #
 
 ref_wav_He_air={'He1':10829.09114, 'He2':10830.25010, 'He3':10830.33977}
 
+ref_wav_Si_vacuum = 10830.0549 # angstrom
+
+ref_wav_Si_air = 10827.089
+
 x0_he={ 'He1':-32.08124686382154, 'He2':0, 'He3': 2.4821145512899165} # km/s
-
-
-
 
 def He_triplet_line_wav(x, T,n_col, v_sini,delta_d, choice, medium, R_pow, micro_t):
 
@@ -76,7 +77,56 @@ def He_triplet_line_wav(x, T,n_col, v_sini,delta_d, choice, medium, R_pow, micro
 
     return return_value
 
-def abs_line_wav(x,f_osc, T, n_col, v_sini, m, lambda0,delta_d, Aki, R_pow, micro_t):
+def He_triplet_and_Si_line_wav(x, T_He, T_Si, n_col_He, n_col_Si, v_sini, delta_d_He, delta_d_Si, choice, medium, R_pow, micro_t, RV_offset):
+    '''
+    
+    - medium is either air ou vacuum. This depend on the data you are working with.
+
+    - choice is to choose which He line to include.
+        By default the three lines are used.
+        
+    '''
+
+    return_value = 1.
+
+    if medium == "AIR":
+        if choice[0]:
+
+            return_value *= abs_line_wav(x,f_oscHe['He1'],T_He, n_col_He, v_sini, m_he, ref_wav_He_air['He1'],delta_d_He, Aki_He, R_pow, micro_t)
+
+        if choice[1] :
+
+            return_value *= abs_line_wav(x,f_oscHe['He2'],T_He, n_col_He, v_sini, m_he, ref_wav_He_air['He2'],delta_d_He, Aki_He, R_pow, micro_t, RV_offset)
+
+        if choice[2] :
+
+            return_value *= abs_line_wav(x,f_oscHe['He3'],T_He, n_col_He, v_sini, m_he, ref_wav_He_air['He3'],delta_d_He, Aki_He, R_pow, micro_t, RV_offset)
+            
+        if choice[3] :
+
+            return_value *= abs_line_wav(x, f_osc_si, T_Si, n_col_Si, v_sini, m_si, ref_wav_Si_air, delta_d_Si, Aki_Si, R_pow, micro_t, RV_offset)
+        
+
+    elif medium =="VACUUM":
+        if choice[0]:
+
+            return_value *= abs_line_wav(x,f_oscHe['He1'],T_He, n_col_He, v_sini, m_he, ref_wav_He_vacuum['He1'],delta_d_He, Aki_He, R_pow, micro_t, RV_offset)
+
+        if choice[1] :
+
+            return_value *= abs_line_wav(x,f_oscHe['He2'],T_He, n_col_He, v_sini, m_he, ref_wav_He_vacuum['He2'],delta_d_He, Aki_He, R_pow, micro_t, RV_offset)
+
+        if choice[2] :
+
+            return_value *= abs_line_wav(x,f_oscHe['He3'],T_He, n_col_He, v_sini, m_he, ref_wav_He_vacuum['He3'],delta_d_He, Aki_He, R_pow, micro_t, RV_offset)
+
+        if choice[3] :
+
+            return_value *= abs_line_wav(x, f_osc_si, T_Si, n_col_Si, v_sini, m_si, ref_wav_Si_vacuum, delta_d_Si, Aki_Si, R_pow, micro_t, RV_offset)
+            
+    return return_value
+
+def abs_line_wav(x,f_osc, T, n_col, v_sini, m, lambda0,delta_d, Aki, R_pow, micro_t, RV_offset):
 
     '''
     
@@ -143,14 +193,14 @@ def abs_line_wav(x,f_osc, T, n_col, v_sini, m, lambda0,delta_d, Aki, R_pow, micr
         # With d  = damping / width, avec damping dans l'unité de width
         # we specify what fraction of width the dmaping is with d
         
-        z = c_light_m/ lambda0 * (x - lambda0) / (width) + 1j*d
+        z = ((c_light_m/ lambda0 * (x - lambda0)) + RV_offset) / (width) + 1j*d
         
         line_profile = wofz(z).real
 
     else :
     # Gaussian
     
-        line_profile = np.exp( - ( c_light_m/lambda0 * (x - lambda0) )**2 / (width**2))
+        line_profile = np.exp( - ( (c_light_m/lambda0 * (x - lambda0))+RV_offset )**2 / (width**2))
     
     return np.exp(- factor * f_osc * lambda0 * 1e-10 / (np.sqrt(np.pi) * width) * n_col * line_profile)
 
