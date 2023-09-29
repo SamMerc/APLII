@@ -495,8 +495,12 @@ def equivalent_width_calculator(wavelength, flux_vals, flux_errs, N, wav_ranges,
     #Interpolate line to have more points on the line
     ref_wavelength = np.linspace(low_lim, up_lim, N)
     
-    interpol_func_vals = interp1d(wavelength, flux_vals, kind='cubic', fill_value='extrapolate')
-    interpol_func_errs = interp1d(wavelength, flux_errs**2, kind='cubic', fill_value='extrapolate')
+    inter_flux_vals = bound(low_lim, up_lim, wavelength, flux_vals)
+    inter_flux_errs = bound(low_lim, up_lim, wavelength, flux_errs)
+    interp_wavelength = bound(low_lim, up_lim, wavelength, wavelength)
+    
+    interpol_func_vals = interp1d(interp_wavelength, inter_flux_vals, kind='cubic', fill_value='extrapolate')
+    interpol_func_errs = interp1d(interp_wavelength, inter_flux_errs**2, kind='cubic', fill_value='extrapolate')
     
     interp_flux_vals = interpol_func_vals(ref_wavelength)
     interp_flux_errs = np.sqrt(interpol_func_errs(ref_wavelength))
@@ -574,7 +578,7 @@ def equivalent_width_calculator(wavelength, flux_vals, flux_errs, N, wav_ranges,
         return Eq_width
 
 
-def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, guess_bounds, x, y, y_err, c, wav_ranges, plot=True, N=100):
+def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, guess_bounds, x, y, y_err, c, wav_ranges, param_names, plot=True, N=100):
     '''
     Routine to fit a function, fit_func, to a spectral line located in the wavelength range [low_lim, up_lim].
     We give as input a guess for the best-fit parameters and the acceptable bounds within which the algorithm
@@ -594,6 +598,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, 
     :param y_err: array, containing the error values on the data we want to fit.
     :param c: string, the color of the best-fit model when plotting.
     :param wav_ranges: list of tuples, containing the continuum chunks used for the equivalent width calculation.
+    :param param_names: list, containing the name of the parameters in fit_func we want to fit for.
     :param plot: bool, whether or not to plot the diagnostic plots.
     :param N: int, number of points to interpolate on for the equivalent width calculation.
     
@@ -601,11 +606,15 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, 
     ----------
     :param thetas: array, containing best-fit parameters for the fit to each (x[i], y[i]) pair.
     :param err: array, containing the error bars on the best-fit parameters for the fit to each (x[i], y[i]) pair.
+    :param lmfit_thetas: array, containing best-fit parameters for the fit to each (x[i], y[i]) pair, using lmfit.
+    :param lmfit_err: array, containing the error bars on the best-fit parameters for the fit to each (x[i], y[i]) pair, 
+    using lmfit.
     '''
 
     #Initializing the arrays containing the best-fit parameters and the errors on them.
     thetas = np.ones((len(y), len(ini_guess)+1))
     lmfit_thetas = np.ones((len(y), len(ini_guess)+1))
+    lmfit_err = np.ones((len(y), len(ini_guess)+1))
     err = np.ones((len(y), len(ini_guess)+1))
     
     #Looping over all the arrays(/spectra).
@@ -629,16 +638,17 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, 
 
         #Using lmfit
         lm_fit_func = lf.Model(fit_func)
-        result = lm_fit_func.fit(bound_y, x=bound_x, log_temp_He=ini_guess[0], log_temp_Si=ini_guess[1], log_density_He=ini_guess[2], log_density_Si=ini_guess[3], Si_d=ini_guess[4], RV_offset=ini_guess[5], A=ini_guess[6], B=ini_guess[7])
+        param = lf.Parameters()
+        for j in range(len(ini_guess)):
+            param.add(param_names[j], value=ini_guess[j], min=guess_bounds[0][j], max=guess_bounds[1][j])
+
+        result = lm_fit_func.fit(bound_y, x=bound_x, params=param, weights=1/bound_y_err**2)
         print(result.fit_report())
-        lmfit_thetas[i][0] = result.params['log_temp_He'].value
-        lmfit_thetas[i][1] = result.params['log_temp_Si'].value
-        lmfit_thetas[i][2] = result.params['log_density_He'].value
-        lmfit_thetas[i][3] = result.params['log_density_Si'].value
-        lmfit_thetas[i][4] = result.params['Si_d'].value
-        lmfit_thetas[i][5] = result.params['RV_offset'].value
-        lmfit_thetas[i][6] = result.params['A'].value
-        lmfit_thetas[i][7] = result.params['B'].value
+        
+        for h in range(len(ini_guess)):
+            lmfit_thetas[i][h] = result.params[param_names[h]].value
+            lmfit_err[i][h] = result.params[param_names[h]].stderr
+
         #Getting the equivalent width 
         #spectrum_obj = Spectrum1D(flux = bound_y*u.Jy, spectral_axis = bound_x*u.AA)
         #eq_width2 = equivalent_width(spectrum_obj)
@@ -646,15 +656,19 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, 
             eq_width, eq_width_err = equivalent_width_calculator(x[i], y[i], y_err[i], N, wav_ranges, low_lim_ew, up_lim_ew, plot) 
             thetas[i][-1] = eq_width
             err[i][-1] = eq_width_err
+            lmfit_err[i][-1] = eq_width_err
         
         else:
             eq_width = equivalent_width_calculator(x[i], y[i], [], N, wav_ranges, low_lim_ew, up_lim_ew, plot) 
             thetas[i][-1] = eq_width
         
         lmfit_thetas[i][-1] = eq_width
+    
         #Creating the best-fit model for plotting purposes.
-        model = fit_func(bound_x, *params)
-
+        model_x = np.linspace(low_lim, up_lim, N)
+        model_curve_fit = fit_func(model_x, *params)
+        model_lmfit = lm_fit_func.eval(params = result.params, x=model_x)
+ 
         #Plotting the best-fit model on top of the data.
         if plot:
             plt.figure(figsize=[8, 5])
@@ -662,8 +676,8 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, 
                 plt.errorbar(bound_x, bound_y, yerr=bound_y_err,  fmt='b.', label='data')
             else:
                 plt.plot(bound_x, bound_y, 'b.', label='data')
-            plt.plot(bound_x, model, c, label='Curve fit')
-            plt.plot(bound_x, result.best_fit, 'g', label='Lmfit')
+            plt.plot(model_x, model_curve_fit, c, label='Curve fit')
+            plt.plot(model_x, model_lmfit, 'g', label='Lmfit')
             plt.xlabel('Wavelength ($\AA$)')
             plt.ylabel('Normalized Flux')
             plt.legend()
@@ -671,7 +685,141 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, 
                 print(thetas[i][j], err[i][j])
             plt.show()
 
-    return thetas, err, lmfit_thetas
+    return thetas, err, lmfit_thetas, lmfit_err
+
+def fit_spctr_line_special(fit_func, include_ranges, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, guess_bounds, x, y, y_err, c, wav_ranges, param_names, plot=True, N=100):
+    '''
+    Routine to fit a function, fit_func, to a spectral line located in the wavelength range [low_lim, up_lim].
+    We give as input a guess for the best-fit parameters and the acceptable bounds within which the algorithm
+    should search for the best-fit.
+    Parameters
+    ----------
+    :param fit_func: function, that we want to fit the spectral line with.
+    :param include_ranges: list of tuples, containing the wavelength ranges to include in our analysis.
+    :param low_lim: float, lower limit of the wavelength range we want to fit over.
+    :param upper_lim: float, upper limit of the wavelength range we want to fit over.
+    :param low_lim_ew: float, lower limit of the wavelength range we want to calculate the equivalent width over.
+    :param upper_lim_ew: float, upper limit of the wavelength range we want to calculate the equivalent width over.
+    :param ini_guess: array, containing an initial guess/starting point for the best-fit parameter values.
+    :param guess_bounds: array, containing the bounds, with respect to the initial guess, 
+    within which we search for the best-fit parameters.
+    :param x: array, containing the wavelength values.
+    :param y: array, containing the data we want to fit(e.g. flux values of spectra).
+    :param y_err: array, containing the error values on the data we want to fit.
+    :param c: string, the color of the best-fit model when plotting.
+    :param wav_ranges: list of tuples, containing the continuum chunks used for the equivalent width calculation.
+    :param param_names: list, containing the name of the parameters in fit_func we want to fit for.
+    :param plot: bool, whether or not to plot the diagnostic plots.
+    :param N: int, number of points to interpolate on for the equivalent width calculation.
+    
+    Returns
+    ----------
+    :param thetas: array, containing best-fit parameters for the fit to each (x[i], y[i]) pair.
+    :param err: array, containing the error bars on the best-fit parameters for the fit to each (x[i], y[i]) pair.
+    :param lmfit_thetas: array, containing best-fit parameters for the fit to each (x[i], y[i]) pair, using lmfit.
+    :param lmfit_err: array, containing the error bars on the best-fit parameters for the fit to each (x[i], y[i]) pair, 
+    using lmfit.
+    '''
+
+    #Initializing the arrays containing the best-fit parameters and the errors on them.
+    thetas = np.ones((len(y), len(ini_guess)+1))
+    lmfit_thetas = np.ones((len(y), len(ini_guess)+1))
+    lmfit_err = np.ones((len(y), len(ini_guess)+1))
+    err = np.ones((len(y), len(ini_guess)+1))
+    
+    #Looping over all the arrays(/spectra).
+    for i in range(len(x)):
+        
+        #Creating the bound versions of the x[i], y[i] and y_err[i] arrays. Bound over the 
+        # wavelength range of interest.
+        boun_x = bound(low_lim, up_lim, x[i], x[i])
+        boun_y = bound(low_lim, up_lim, x[i], y[i])
+        if len(y_err)!=0:
+            boun_y_err = bound(low_lim, up_lim, x[i], y_err[i])
+        
+        #Only keep the wavelength ranges we want to consider
+        includ_lamda = []
+        includ_flux = []
+        includ_err = []
+        for m in include_ranges:
+            includ_lamda.append(bound(m[0], m[1], boun_x, boun_x))
+            includ_flux.append(bound(m[0], m[1], boun_x, boun_y))
+            if len(y_err)!=0:
+                includ_err.append(bound(m[0], m[1], boun_x, boun_y_err))
+
+        bound_x = np.array(list(itertools.chain.from_iterable(includ_lamda)))
+        bound_y = np.array(list(itertools.chain.from_iterable(includ_flux)))
+        if len(y_err)!=0:
+            bound_y_err = np.array(list(itertools.chain.from_iterable(includ_err)))
+        
+        if plot and i==0:
+            if len(y_err)!=0:
+                plt.errorbar(boun_x, boun_y, yerr=boun_y_err, fmt='b.', label='Before cut')
+                plt.errorbar(bound_x, bound_y, yerr=bound_y_err, fmt='r.', label='After cut')
+            else:
+                plt.plot(boun_x, boun_y,'b.', label='Excluded')
+                plt.plot(bound_x, bound_y, 'r.', label='Included')
+            plt.legend()
+            plt.show()
+        
+        #Using the curve_fit function from scipy to fit the function of interest to the data.
+        if len(y_err)!=0:
+            params, cov = curve_fit(fit_func, bound_x, bound_y, sigma=bound_y_err, p0 = ini_guess, bounds = guess_bounds)
+        else:
+            params, cov = curve_fit(fit_func, bound_x, bound_y, p0 = ini_guess, bounds = guess_bounds)
+        #Extracting the best-fit parameters and the error on the best-fit parameters.
+        thetas[i][:-1] = params
+        err[i][:-1] = np.sqrt(np.diag(cov))
+
+        #Using lmfit
+        lm_fit_func = lf.Model(fit_func)
+        param = lf.Parameters()
+        for j in range(len(ini_guess)):
+            param.add(param_names[j], value=ini_guess[j], min=guess_bounds[0][j], max=guess_bounds[1][j])
+
+        result = lm_fit_func.fit(bound_y, x=bound_x, params=param, weights=1/bound_y_err**2)
+        print(result.fit_report())
+        
+        for h in range(len(ini_guess)):
+            lmfit_thetas[i][h] = result.params[param_names[h]].value
+            lmfit_err[i][h] = result.params[param_names[h]].stderr
+
+        #Getting the equivalent width 
+        #spectrum_obj = Spectrum1D(flux = bound_y*u.Jy, spectral_axis = bound_x*u.AA)
+        #eq_width2 = equivalent_width(spectrum_obj)
+        if len(y_err)!=0:
+            eq_width, eq_width_err = equivalent_width_calculator(x[i], y[i], y_err[i], N, wav_ranges, low_lim_ew, up_lim_ew, plot) 
+            thetas[i][-1] = eq_width
+            err[i][-1] = eq_width_err
+            lmfit_err[i][-1] = eq_width_err
+        
+        else:
+            eq_width = equivalent_width_calculator(x[i], y[i], [], N, wav_ranges, low_lim_ew, up_lim_ew, plot) 
+            thetas[i][-1] = eq_width
+        
+        lmfit_thetas[i][-1] = eq_width
+    
+        #Creating the best-fit model for plotting purposes.
+        model_x = np.linspace(low_lim, up_lim, N)
+        model_curve_fit = fit_func(model_x, *params)
+        model_lmfit = lm_fit_func.eval(params = result.params, x=model_x)
+        #Plotting the best-fit model on top of the data.
+        if plot:
+            plt.figure(figsize=[8, 5])
+            if len(y_err)!=0:
+                plt.errorbar(bound_x, bound_y, yerr=bound_y_err,  fmt='b.', label='data')
+            else:
+                plt.plot(bound_x, bound_y, 'b.', label='data')
+            plt.plot(model_x, model_curve_fit, c, label='Curve fit')
+            plt.plot(model_x, model_lmfit, 'g', label='Lmfit')
+            plt.xlabel('Wavelength ($\AA$)')
+            plt.ylabel('Normalized Flux')
+            plt.legend()
+            for j in range(len(thetas[i])):
+                print(thetas[i][j], err[i][j])
+            plt.show()
+
+    return thetas, err, lmfit_thetas, lmfit_err
 
 
 def plot_TS_Periodo(T, L, L_err, title1, title2, mode, save=True, fit=False, order=1, N=1000):
