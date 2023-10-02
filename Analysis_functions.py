@@ -754,8 +754,8 @@ def fit_spctr_line_special(fit_func, include_ranges, low_lim, up_lim, low_lim_ew
         
         if plot and i==0:
             if len(y_err)!=0:
-                plt.errorbar(boun_x, boun_y, yerr=boun_y_err, fmt='b.', label='Before cut')
-                plt.errorbar(bound_x, bound_y, yerr=bound_y_err, fmt='r.', label='After cut')
+                plt.errorbar(boun_x, boun_y, yerr=boun_y_err, fmt='b.', label='Excluded')
+                plt.errorbar(bound_x, bound_y, yerr=bound_y_err, fmt='r.', label='Included')
             else:
                 plt.plot(boun_x, boun_y,'b.', label='Excluded')
                 plt.plot(bound_x, bound_y, 'r.', label='Included')
@@ -776,8 +776,10 @@ def fit_spctr_line_special(fit_func, include_ranges, low_lim, up_lim, low_lim_ew
         param = lf.Parameters()
         for j in range(len(ini_guess)):
             param.add(param_names[j], value=ini_guess[j], min=guess_bounds[0][j], max=guess_bounds[1][j])
-
-        result = lm_fit_func.fit(bound_y, x=bound_x, params=param, weights=1/bound_y_err**2)
+        if len(y_err)!=0:
+            result = lm_fit_func.fit(bound_y, x=bound_x, params=param, weights=1/bound_y_err**2)
+        else:
+            result = lm_fit_func.fit(bound_y, x=bound_x, params=param)
         print(result.fit_report())
         
         for h in range(len(ini_guess)):
