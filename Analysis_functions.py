@@ -1,12 +1,13 @@
 #Importing libraries
+import bindensity as bind
 import numpy as np
 import matplotlib.pyplot as plt
 import astropy.io.fits as pf
 import os
 from astropy.modeling import models
 from astropy import units as u
-from specutils import Spectrum1D
-from specutils.analysis import equivalent_width
+#from specutils import Spectrum1D
+#from specutils.analysis import equivalent_width
 from scipy.optimize import curve_fit
 from astropy.timeseries import LombScargle
 from scipy.special import voigt_profile
@@ -16,7 +17,7 @@ import pandas as pd
 import itertools
 import lmfit as lf
 import scipy.stats as ss
-import bindensity as bind
+import spectrum_model as spec_mod
 
 def extraction(file_directory, blaze_directory, CCF_directory, order):
     '''
@@ -673,11 +674,11 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, 
         if plot:
             plt.figure(figsize=[8, 5])
             if len(y_err)!=0:
-                plt.errorbar(bound_x, bound_y, yerr=bound_y_err,  fmt='b.', label='data')
+                plt.errorbar(bound_x, bound_y, yerr=bound_y_err,  fmt='b.', label='data', alpha=0.2)
             else:
-                plt.plot(bound_x, bound_y, 'b.', label='data')
+                plt.plot(bound_x, bound_y, 'b.', label='data', alpha=0.2)
             plt.plot(model_x, model_curve_fit, c, label='Curve fit')
-            plt.plot(model_x, model_lmfit, 'g', label='Lmfit')
+            plt.plot(model_x, model_lmfit, color='darkgreen', label='Lmfit')
             plt.xlabel('Wavelength ($\AA$)')
             plt.ylabel('Normalized Flux')
             plt.legend()
@@ -687,7 +688,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, 
 
     return thetas, err, lmfit_thetas, lmfit_err
 
-def fit_spctr_line_special(fit_func, include_ranges, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, guess_bounds, x, y, y_err, c, wav_ranges, param_names, plot=True, N=100):
+def fit_spctr_line_special(fit_func, include_ranges, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, guess_bounds, x, y, y_err, c, wav_ranges, param_names, R_power, plot=True, N=100):
     '''
     Routine to fit a function, fit_func, to a spectral line located in the wavelength range [low_lim, up_lim].
     We give as input a guess for the best-fit parameters and the acceptable bounds within which the algorithm
@@ -709,6 +710,7 @@ def fit_spctr_line_special(fit_func, include_ranges, low_lim, up_lim, low_lim_ew
     :param c: string, the color of the best-fit model when plotting.
     :param wav_ranges: list of tuples, containing the continuum chunks used for the equivalent width calculation.
     :param param_names: list, containing the name of the parameters in fit_func we want to fit for.
+    :param R_power: float, resolution power of the instrument used.
     :param plot: bool, whether or not to plot the diagnostic plots.
     :param N: int, number of points to interpolate on for the equivalent width calculation.
     
@@ -754,11 +756,11 @@ def fit_spctr_line_special(fit_func, include_ranges, low_lim, up_lim, low_lim_ew
         
         if plot and i==0:
             if len(y_err)!=0:
-                plt.errorbar(boun_x, boun_y, yerr=boun_y_err, fmt='b.', label='Excluded')
-                plt.errorbar(bound_x, bound_y, yerr=bound_y_err, fmt='r.', label='Included')
+                plt.errorbar(boun_x, boun_y, yerr=boun_y_err, fmt='r.', label='Excluded')
+                plt.errorbar(bound_x, bound_y, yerr=bound_y_err, fmt='b.', label='Included')
             else:
-                plt.plot(boun_x, boun_y,'b.', label='Excluded')
-                plt.plot(bound_x, bound_y, 'r.', label='Included')
+                plt.plot(boun_x, boun_y,'r.', label='Excluded')
+                plt.plot(bound_x, bound_y, 'b.', label='Included')
             plt.legend()
             plt.show()
         
@@ -805,20 +807,39 @@ def fit_spctr_line_special(fit_func, include_ranges, low_lim, up_lim, low_lim_ew
         model_x = np.linspace(low_lim, up_lim, N)
         model_curve_fit = fit_func(model_x, *params)
         model_lmfit = lm_fit_func.eval(params = result.params, x=model_x)
+        
+        #Creating the two parts of the model.
+        poly_continuum = result.params['A'].value + result.params['B'].value*model_x
+        
+        model_Si_line = spec_mod.spectrum_Si(model_x, poly_continuum, 10**result.params['log_temp_Si'].value, 10**result.params['log_density_Si'].value, None, 'VACUUM', result.params['RV_offset_Si'].value, R_pow = R_power) #Si_delta_damping = result.params['Si_d'].value, R_pow = R_power)
+        
+        model_He_line = spec_mod.spectrum_he(model_x, poly_continuum, 10**result.params['log_temp_He'].value, 10**result.params['log_density_He'].value, None, 'VACUUM', result.params['RV_offset_He'].value, R_pow = R_power)
+        
         #Plotting the best-fit model on top of the data.
         if plot:
-            plt.figure(figsize=[8, 5])
+            fig, (ax1, ax2) = plt.subplots(1, 2, sharey=True, figsize=[10, 5])
             if len(y_err)!=0:
-                plt.errorbar(bound_x, bound_y, yerr=bound_y_err,  fmt='b.', label='data')
+                ax1.errorbar(boun_x, boun_y, yerr=boun_y_err, fmt='r.', label='data - Excluded', alpha=0.2)
+                ax1.errorbar(bound_x, bound_y, yerr=bound_y_err,  fmt='b.', label='data - Included', alpha=0.2)
+                ax2.errorbar(boun_x, boun_y, yerr=boun_y_err, fmt='r.', alpha=0.2)
+                ax2.errorbar(bound_x, bound_y, yerr=bound_y_err,  fmt='b.', alpha=0.2)
             else:
-                plt.plot(bound_x, bound_y, 'b.', label='data')
-            plt.plot(model_x, model_curve_fit, c, label='Curve fit')
-            plt.plot(model_x, model_lmfit, 'g', label='Lmfit')
-            plt.xlabel('Wavelength ($\AA$)')
-            plt.ylabel('Normalized Flux')
-            plt.legend()
+                ax1.errorbar(boun_x, boun_y, fmt='r.', label='data - Excluded', alpha=0.2)
+                ax1.plot(bound_x, bound_y, 'b.', label='data - Included', alpha=0.2)
+                ax2.errorbar(boun_x, boun_y, fmt='r.', alpha=0.2)
+                ax2.plot(bound_x, bound_y, 'b.', alpha=0.2)
+            ax1.plot(model_x, model_curve_fit, c, label='Curve fit')
+            ax1.plot(model_x, model_lmfit, color='darkgreen', label='Lmfit')
+            ax2.plot(model_x, model_Si_line, 'k', linestyle='--', label='Si fit')
+            ax2.plot(model_x, model_He_line, color='orange', linestyle='--', label='He triplet fit')
+            ax1.set_xlabel('Wavelength ($\AA$)')
+            ax2.set_xlabel('Wavelength ($\AA$)')
+            ax1.set_ylabel('Normalized Flux')
+            ax1.legend()
+            ax2.legend()
             for j in range(len(thetas[i])):
                 print(thetas[i][j], err[i][j])
+            plt.subplots_adjust(wspace=0)
             plt.show()
 
     return thetas, err, lmfit_thetas, lmfit_err

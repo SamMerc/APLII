@@ -6,14 +6,28 @@ from functions import *
 from copy import deepcopy
 reload(lm)
 
-def spectrum_he(wavelength, I,  He_temperature,He_density, vsini, medium, choice = [True,True,True], He_delta_damping = 0, R_pow = None, micro_t = None) :
+def spectrum_he(wavelength, I,  He_temperature,He_density, vsini, medium, RV_offset, choice = [True,True,True], He_delta_damping = 0, R_pow = None, micro_t = None) :
     
     # Your spectrum
     Intensity = deepcopy(I)
 
 
     # Only absorption, no emission
-    etau = lm.He_triplet_line_wav(wavelength, He_temperature, He_density, vsini, He_delta_damping, choice, medium, R_pow, micro_t)
+    etau = lm.He_triplet_line_wav(wavelength, He_temperature, He_density, vsini, He_delta_damping, choice, medium, R_pow, micro_t, RV_offset)
+    snu = 0.0
+
+        
+        
+    return Intensity * etau + snu * (1.0 - etau)
+
+def spectrum_Si(wavelength, I,  Si_temperature,Si_density, vsini, medium, RV_offset_Si, Si_delta_damping = 0, R_pow = None, micro_t = None) :
+    
+    # Your spectrum
+    Intensity = deepcopy(I)
+
+
+    # Only absorption, no emission
+    etau = lm.Si_line_wav(wavelength, Si_temperature, Si_density, vsini, Si_delta_damping, medium, R_pow, micro_t, RV_offset_Si)
     snu = 0.0
 
         
