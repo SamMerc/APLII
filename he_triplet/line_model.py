@@ -146,6 +146,54 @@ def He_triplet_and_Si_line_wav(x, T_He, T_Si, n_col_He, n_col_Si, v_sini, delta_
             return_value *= abs_line_wav(x, f_osc_si, T_Si, n_col_Si, v_sini, m_si, ref_wav_Si_vacuum, delta_d_Si, Aki_Si, R_pow, micro_t, RV_offset_Si)
             
     return return_value
+def He_triplet_and_Si_line_wav_Complex(x, T_He, T_Si, n_col_He, n_col_Si, v_sini, delta_d_He, delta_d_Si, choice, medium, R_pow, micro_t, RV_offset_He, RV_offset_Si):
+    '''
+    
+    - medium is either air ou vacuum. This depend on the data you are working with.
+
+    - choice is to choose which He line to include.
+        By default the three lines are used.
+        
+    '''
+
+    return_value = 1.
+
+    if medium == "AIR":
+        if choice[0]:
+
+            return_value *= abs_line_wav(x,f_oscHe['He1'],T_He, n_col_He, v_sini, m_he, ref_wav_He_air['He1'],delta_d_He, Aki_He, R_pow, micro_t, RV_offset_He)
+
+        if choice[1] :
+
+            return_value *= abs_line_wav(x,f_oscHe['He2'],T_He, n_col_He, v_sini, m_he, ref_wav_He_air['He2'],delta_d_He, Aki_He, R_pow, micro_t, RV_offset_He)
+
+        if choice[2] :
+
+            return_value *= abs_line_wav(x,f_oscHe['He3'],T_He, n_col_He, v_sini, m_he, ref_wav_He_air['He3'],delta_d_He, Aki_He, R_pow, micro_t, RV_offset_He)
+            
+        if choice[3] :
+
+            return_value *= abs_line_wav(x, f_osc_si, T_Si, n_col_Si, v_sini, m_si, ref_wav_Si_air, delta_d_Si, Aki_Si, R_pow, micro_t, RV_offset_Si)
+        
+
+    elif medium =="VACUUM":
+        if choice[0]:
+
+            return_value *= abs_line_wav(x,f_oscHe['He1'],T_He, n_col_He, v_sini, m_he, ref_wav_He_vacuum['He1'],delta_d_He, Aki_He, R_pow, micro_t, RV_offset_He)
+
+        if choice[1] :
+
+            return_value *= abs_line_wav(x,f_oscHe['He2'],T_He, n_col_He, v_sini, m_he, ref_wav_He_vacuum['He2'],delta_d_He, Aki_He, R_pow, micro_t, RV_offset_He)
+
+        if choice[2] :
+
+            return_value *= abs_line_wav(x,f_oscHe['He3'],T_He, n_col_He, v_sini, m_he, ref_wav_He_vacuum['He3'],delta_d_He, Aki_He, R_pow, micro_t, RV_offset_He)
+
+        if choice[3] :
+
+            return_value *= abs_line_wav(x, f_osc_si, T_Si, n_col_Si, v_sini, m_si, ref_wav_Si_vacuum, delta_d_Si, Aki_Si, R_pow, micro_t, RV_offset_Si)
+            
+    return return_value
 
 def abs_line_wav(x,f_osc, T, n_col, v_sini, m, lambda0,delta_d, Aki, R_pow, micro_t, RV_offset):
 

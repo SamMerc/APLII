@@ -17,6 +17,7 @@ import pandas as pd
 import itertools
 import lmfit as lf
 import scipy.stats as ss
+os.chdir('/Users/samsonmercier/Desktop/UNIGE/Winter_Semester_2022-2023/APLII/he_triplet')
 import spectrum_model as spec_mod
 
 def extraction(file_directory, blaze_directory, CCF_directory, order):
@@ -619,7 +620,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, 
     err = np.ones((len(y), len(ini_guess)+1))
     
     #Looping over all the arrays(/spectra).
-    for i in range(len(x)):
+    for i in range(5):#len(x)):
         
         #Creating the bound versions of the x[i], y[i] and y_err[i] arrays. Bound over the 
         # wavelength range of interest.
@@ -669,7 +670,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, 
         model_x = np.linspace(low_lim, up_lim, N)
         model_curve_fit = fit_func(model_x, *params)
         model_lmfit = lm_fit_func.eval(params = result.params, x=model_x)
- 
+        print(model_curve_fit)
         #Plotting the best-fit model on top of the data.
         if plot:
             plt.figure(figsize=[8, 5])
@@ -678,9 +679,10 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, 
             else:
                 plt.plot(bound_x, bound_y, 'b.', label='data', alpha=0.2)
             plt.plot(model_x, model_curve_fit, c, label='Curve fit')
-            plt.plot(model_x, model_lmfit, color='darkgreen', label='Lmfit')
+            plt.plot(model_x, model_lmfit, '.', color='darkgreen', label='Lmfit')
             plt.xlabel('Wavelength ($\AA$)')
             plt.ylabel('Normalized Flux')
+            plt.ylim(0.1, 1.1)
             plt.legend()
             for j in range(len(thetas[i])):
                 print(thetas[i][j], err[i][j])
@@ -811,7 +813,10 @@ def fit_spctr_line_special(fit_func, include_ranges, low_lim, up_lim, low_lim_ew
         #Creating the two parts of the model.
         poly_continuum = result.params['A'].value + result.params['B'].value*model_x
         
-        model_Si_line = spec_mod.spectrum_Si(model_x, poly_continuum, 10**result.params['log_temp_Si'].value, 10**result.params['log_density_Si'].value, None, 'VACUUM', result.params['RV_offset_Si'].value, R_pow = R_power) #Si_delta_damping = result.params['Si_d'].value, R_pow = R_power)
+        if param_names.count('Si_d') > 0:
+            model_Si_line = spec_mod.spectrum_Si(model_x, poly_continuum, 10**result.params['log_temp_Si'].value, 10**result.params['log_density_Si'].value, None, 'VACUUM', result.params['RV_offset_Si'].value, Si_delta_damping = result.params['Si_d'].value, R_pow = R_power)
+        else:
+            model_Si_line = spec_mod.spectrum_Si(model_x, poly_continuum, 10**result.params['log_temp_Si'].value, 10**result.params['log_density_Si'].value, None, 'VACUUM', result.params['RV_offset_Si'].value, R_pow = R_power) 
         
         model_He_line = spec_mod.spectrum_he(model_x, poly_continuum, 10**result.params['log_temp_He'].value, 10**result.params['log_density_He'].value, None, 'VACUUM', result.params['RV_offset_He'].value, R_pow = R_power)
         
@@ -1023,11 +1028,12 @@ def Correlation_Plot(mode, A, B, A_err, B_err, titleA, titleB, title, day, save=
             plt.savefig('/Users/samsonmercier/Desktop/'+title+'-'+day[-2:]+'.pdf')
 
 
-def new_extraction(file_directory, blaze_directory, CCF_directory, telluric_directory, rassine_directory, order, wav_ranges, Rassine=False, plot=False):
+def new_extraction(location, file_directory, blaze_directory, CCF_directory, telluric_directory, rassine_directory, order, wav_ranges, Rassine=False, plot=False):
     '''
     Function to extract the important quantities from the FITS files for a given day of solar observations.
     Parameters
     ----------
+    :param location: string, path to where all the folders with the files are.
     :param file_directory: string, name of directory containing the spectral FITS files for a given day of solar observations.
     :param blaze_directory: string, name of directory containing the blaze FITS files for a given day of solar observations.
     Generally, there will be one or two files depending on the number of modes of observation.
@@ -1067,6 +1073,8 @@ def new_extraction(file_directory, blaze_directory, CCF_directory, telluric_dire
     :param total_AIRM: nested array, containing the airmass at the time of observation for each spectrum.
     '''
     print('INITIALIZATION')
+    #Move to file locations
+    os.chdir(location)
     #Initialize the arrays.
     #Contains the wavelength for the order of interest for the spectra.
     total_lamda = np.zeros((len(os.listdir(file_directory)), 4084))
@@ -1120,7 +1128,7 @@ def new_extraction(file_directory, blaze_directory, CCF_directory, telluric_dire
     total_H2O = np.zeros((len(os.listdir(file_directory))))
     total_O2 = np.zeros((len(os.listdir(file_directory))))
     total_CO2 = np.zeros((len(os.listdir(file_directory))))
-    
+   
     #Contains the error on the integrated column density of H2O, CO2 and O2 at the time of acquisition of the spectra.
     total_H2O_err = np.zeros((len(os.listdir(file_directory))))
     total_O2_err = np.zeros((len(os.listdir(file_directory))))
@@ -1131,7 +1139,7 @@ def new_extraction(file_directory, blaze_directory, CCF_directory, telluric_dire
     
     #Defining the Sun's BB for later.
     Sun_BB = models.BlackBody(temperature = 5778*u.K)
-
+    
     #Initial mode analysis to see the modes used in the data.
     for i in range(len(os.listdir(file_directory))):
         file = pf.open(file_directory+'/'+sorted(os.listdir(file_directory))[i])
