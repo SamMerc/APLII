@@ -644,7 +644,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, 
         for j in range(len(ini_guess)):
             param.add(param_names[j], value=ini_guess[j], min=guess_bounds[0][j], max=guess_bounds[1][j])
 
-        result = lm_fit_func.fit(bound_y, x=bound_x, params=param, weights=1/bound_y_err**2)
+        result = lm_fit_func.fit(bound_y, x=bound_x, params=param, weights=1/bound_y_err**2, method='ampgo')
         print(result.fit_report())
         
         for h in range(len(ini_guess)):
@@ -670,7 +670,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, 
         model_x = np.linspace(low_lim, up_lim, N)
         model_curve_fit = fit_func(model_x, *params)
         model_lmfit = lm_fit_func.eval(params = result.params, x=model_x)
-        print(model_curve_fit)
+
         #Plotting the best-fit model on top of the data.
         if plot:
             plt.figure(figsize=[8, 5])
@@ -679,7 +679,10 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, 
             else:
                 plt.plot(bound_x, bound_y, 'b.', label='data', alpha=0.2)
             plt.plot(model_x, model_curve_fit, c, label='Curve fit')
-            plt.plot(model_x, model_lmfit, '.', color='darkgreen', label='Lmfit')
+            plt.plot(model_x, model_lmfit, '-', color='darkgreen', label='Lmfit')
+            plt.axvline(air2vac(10827.091)+((result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.)-result.params['ranges'].value, color='k', linestyle='--')
+            plt.axvline(air2vac(10827.091)+((result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.)+result.params['ranges'].value, color='k', linestyle='--')
+            plt.axvline(air2vac(10827.091) + ((result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.), color='r', linestyle='--')
             plt.xlabel('Wavelength ($\AA$)')
             plt.ylabel('Normalized Flux')
             plt.ylim(0.1, 1.1)

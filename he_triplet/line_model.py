@@ -269,7 +269,7 @@ def abs_line_wav(x,f_osc, T, n_col, v_sini, m, lambda0,delta_d, Aki, R_pow, micr
     else :
     # Gaussian
     
-        line_profile = np.exp( - ( (c_light_m/lambda0 * (x - lambda0))+RV_offset )**2 / (width**2))
+        line_profile = np.exp( - ( (c_light_m/lambda0 * (x - lambda0)) + RV_offset )**2 / (width**2))
     
     return np.exp(- factor * f_osc * lambda0 * 1e-10 / (np.sqrt(np.pi) * width) * n_col * line_profile)
 
