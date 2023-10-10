@@ -19,6 +19,7 @@ import lmfit as lf
 import scipy.stats as ss
 os.chdir('/Users/samsonmercier/Desktop/UNIGE/Winter_Semester_2022-2023/APLII/he_triplet')
 import spectrum_model as spec_mod
+import corner
 
 def extraction(file_directory, blaze_directory, CCF_directory, order):
     '''
@@ -476,8 +477,28 @@ def sinusoid(t, A, phase, offset, period):
     '''
     sin_mod = offset + A*np.sin((2*np.pi*t/period) + phase)
     return sin_mod
+   
     
-def equivalent_width_calculator(wavelength, flux_vals, flux_errs, N, wav_ranges, low_lim, up_lim, plot):
+def bootstrap_generate(flux, flux_err, k):
+    '''
+    Function to generate k spectra using a Gaussian distribution.
+    Parameters
+    ----------
+    :param flux: array, flux values to use as the center of the Gaussian distribution.
+    :param flux_err: array, error on the flux values to use as the standard deviation of the Gaussian distribution.
+    :param k: int, number of realizations to make.
+    Returns
+    ----------
+    :param fake_spectra: nested array, containing the generated flux values.
+    '''
+    fake_spectra = np.zeros((len(flux), k))
+    
+    for i in range(len(flux)):
+        fake_spectra[i] = np.random.normal(flux[i], flux_err[i], k)
+    
+    return fake_spectra.T
+        
+def equivalent_width_calculator(wavelength, flux_vals, flux_errs, N, wav_ranges, low_lims, up_lims, plot):
     '''
     Routine to calculate the equivalent width of a line.
     Parameters
@@ -487,100 +508,110 @@ def equivalent_width_calculator(wavelength, flux_vals, flux_errs, N, wav_ranges,
     :param flux_errs: array, error on the flux values.
     :param N: int, number of points to interpolate on for a better determination.
     :param wav_ranges: list of tuples, containing the continuum chunks used for the equivalent width calculation.
-    :param low_lim: float, lower limit of the wavelength range we want to calculate the equivalent width over.
-    :param up_lim: float, upper limit of the wavelength range we want to calculate the equivalent width over.
+    :param low_lims: list, lower limits of the wavelength ranges we want to calculate the equivalent widths over.
+    :param up_lims: lisr, upper limits of the wavelength ranges we want to calculate the equivalent widths over.
     :param plot: bool, whether or not to plot the diagnostic plots.
     Returns
     ----------
-    :param Eq_width: float, equivalent width of the line considered.
+    :param Eq_widths: float, equivalent widths of the lines considered.
+    :param Eq_width_errs: float, errors on the equivalent widths of the lines considered.
     '''
-    #Interpolate line to have more points on the line
-    ref_wavelength = np.linspace(low_lim, up_lim, N)
+    Eq_widths = []
+    Eq_width_errs = []
     
-    inter_flux_vals = bound(low_lim, up_lim, wavelength, flux_vals)
-    inter_flux_errs = bound(low_lim, up_lim, wavelength, flux_errs)
-    interp_wavelength = bound(low_lim, up_lim, wavelength, wavelength)
-    
-    interpol_func_vals = interp1d(interp_wavelength, inter_flux_vals, kind='cubic', fill_value='extrapolate')
-    interpol_func_errs = interp1d(interp_wavelength, inter_flux_errs**2, kind='cubic', fill_value='extrapolate')
-    
-    interp_flux_vals = interpol_func_vals(ref_wavelength)
-    interp_flux_errs = np.sqrt(interpol_func_errs(ref_wavelength))
-
-    ##Retrieving the spectrum, error and wavelengths in these ranges
-    continuu_spctr = []
-    continuu_wav = []
-    continuu_err = []
-    for x in wav_ranges:
-        contin_spctr = bound(x[0], x[1], wavelength, flux_vals)
-        contin_err = bound(x[0], x[1], wavelength, flux_errs)
-        contin_wav = bound(x[0], x[1], wavelength, wavelength)
-        continuu_spctr.append(contin_spctr)
-        continuu_wav.append(contin_wav)
-        continuu_err.append(contin_err)
-    continuum_spctr = np.array(list(itertools.chain.from_iterable(continuu_spctr)))
-    continuum_err = np.array(list(itertools.chain.from_iterable(continuu_err)))
-    continuum_wav = np.array(list(itertools.chain.from_iterable(continuu_wav)))
-    p_continuum = np.poly1d(np.polyfit(continuum_wav, continuum_spctr, 1, w=1/continuum_err**2))
-
-    #Debugging
-    if plot:
-        #Plotting the continuum chunks
-        plt.figure(figsize=[8, 5])
-        plt.errorbar(wavelength, flux_vals, yerr=flux_errs, label='Data')
-        plt.plot(wavelength, p_continuum(wavelength), color='orange', label='Polyn. model')
-        for i, x in enumerate(wav_ranges):
-            plt.axvline(x[0], color='r', linestyle='--')
-            plt.axvline(x[1], color='r', linestyle='--')
-            if i==0:
-                plt.axvspan(x[0], x[1], color='r', alpha=0.3, label='Continuum Range')
-            else:
-                plt.axvspan(x[0], x[1], color='r', alpha=0.3)
-
-        plt.axvline(10833.2, color='red', label='He triplet location')
-        plt.axvline(10833.3, color='red')
-        plt.axvline(10832.1, color='red')
-        plt.axvline(10830.1, color='green')
-        plt.axvline(10830.1, color='green', label='Si line location')
-        plt.ylabel('Normalized Flux')
-        plt.xlabel('Wavelength ($\AA$)')
-        plt.xlim(wav_ranges[0][0]-5, wav_ranges[-1][1]+5)
-        plt.legend()
-        plt.show()
+    for n in range(len(low_lims)):
         
-        #Plotting the equivalent width calculation
-        plt.figure(figsize=[8, 5])
-        plt.errorbar(wavelength, flux_vals, yerr=flux_errs, fmt='b--', label='Initial')
-        plt.errorbar(ref_wavelength, interp_flux_vals, yerr=interp_flux_errs, fmt='r.', label='Interpolated')
-        plt.plot(wavelength, p_continuum(wavelength), 'k--', label='Continuum level')
-        plt.xlabel('Wavelength ($\AA$)')
-        plt.ylabel('Normalized Flux')
-        plt.xlim(low_lim, up_lim)
-        plt.ylim(0.9, 1.01)
-        plt.title('Equivalent Width plot')
-        plt.legend()
-        plt.show()
+        low_lim = low_lims[n]
+        up_lim = up_lims[n]
+        
+        #Interpolate line to have more points on the line
+        ref_wavelength = np.linspace(low_lim, up_lim, N)
 
-    #Approximating the equivalent width as the sum
-    Eq_width = 0.0
-    Eq_width_err = 0.0
-    
-    if len(flux_errs)!=0:
+        inter_flux_vals = bound(low_lim, up_lim, wavelength, flux_vals)
+        inter_flux_errs = bound(low_lim, up_lim, wavelength, flux_errs)
+        interp_wavelength = bound(low_lim, up_lim, wavelength, wavelength)
+
+        interpol_func_vals = interp1d(interp_wavelength, inter_flux_vals, kind='cubic', fill_value='extrapolate')
+        interpol_func_errs = interp1d(interp_wavelength, inter_flux_errs**2, kind='cubic', fill_value='extrapolate')
+
+        interp_flux_vals = interpol_func_vals(ref_wavelength)
+        interp_flux_errs = np.sqrt(interpol_func_errs(ref_wavelength))
+
+        ##Retrieving the spectrum, error and wavelengths in these ranges
+        continuu_spctr = []
+        continuu_wav = []
+        continuu_err = []
+        for x in wav_ranges:
+            contin_spctr = bound(x[0], x[1], wavelength, flux_vals)
+            contin_err = bound(x[0], x[1], wavelength, flux_errs)
+            contin_wav = bound(x[0], x[1], wavelength, wavelength)
+            continuu_spctr.append(contin_spctr)
+            continuu_wav.append(contin_wav)
+            continuu_err.append(contin_err)
+        continuum_spctr = np.array(list(itertools.chain.from_iterable(continuu_spctr)))
+        continuum_err = np.array(list(itertools.chain.from_iterable(continuu_err)))
+        continuum_wav = np.array(list(itertools.chain.from_iterable(continuu_wav)))
+        p_continuum = np.poly1d(np.polyfit(continuum_wav, continuum_spctr, 1, w=1/continuum_err**2))
+
+        #Debugging
+        if plot:
+            #Plotting the continuum chunks
+            plt.figure(figsize=[8, 5])
+            plt.errorbar(wavelength, flux_vals, yerr=flux_errs, label='Data')
+            plt.plot(wavelength, p_continuum(wavelength), color='orange', label='Polyn. model')
+            for i, x in enumerate(wav_ranges):
+                plt.axvline(x[0], color='r', linestyle='--')
+                plt.axvline(x[1], color='r', linestyle='--')
+                if i==0:
+                    plt.axvspan(x[0], x[1], color='r', alpha=0.3, label='Continuum Range')
+                else:
+                    plt.axvspan(x[0], x[1], color='r', alpha=0.3)
+
+            plt.axvline(10833.2, color='red', label='He triplet location')
+            plt.axvline(10833.3, color='red')
+            plt.axvline(10832.1, color='red')
+            plt.axvline(10830.1, color='green')
+            plt.axvline(10830.1, color='green', label='Si line location')
+            plt.ylabel('Normalized Flux')
+            plt.xlabel('Wavelength ($\AA$)')
+            plt.xlim(wav_ranges[0][0]-5, wav_ranges[-1][1]+5)
+            plt.legend()
+            plt.show()
+
+            #Plotting the equivalent width calculation
+            plt.figure(figsize=[8, 5])
+            plt.errorbar(wavelength, flux_vals, yerr=flux_errs, fmt='b--', label='Initial')
+            plt.errorbar(ref_wavelength, interp_flux_vals, yerr=interp_flux_errs, fmt='r.', label='Interpolated')
+            plt.plot(wavelength, p_continuum(wavelength), 'k--', label='Continuum level')
+            plt.xlabel('Wavelength ($\AA$)')
+            plt.ylabel('Normalized Flux')
+            plt.xlim(low_lim, up_lim)
+            plt.ylim(min(interp_flux_vals)-0.05, 1.1)
+            plt.title('Equivalent Width plot')
+            plt.legend()
+            plt.show()
+
+        #Approximating the equivalent width as the sum
+        Eq_width = 0.0
+        Eq_width_err = 0.0
+
         for i in range(1, len(ref_wavelength)):        
             Eq_width += (ref_wavelength[i]-ref_wavelength[i-1]) * (p_continuum(ref_wavelength)[i]-interp_flux_vals[i])
-            Eq_width_err += (ref_wavelength[i]-ref_wavelength[i-1])**2 * interp_flux_errs[i]**2
+            if len(flux_errs)!=0:
+                Eq_width_err += (ref_wavelength[i]-ref_wavelength[i-1])**2 * interp_flux_errs[i]**2
 
         Eq_width_err = np.sqrt(Eq_width_err)
-    
-        return Eq_width, Eq_width_err
+        
+        Eq_widths.append(Eq_width)
+        Eq_width_errs.append(Eq_width_err)
+        
+    if len(flux_errs)!=0:
+        return Eq_widths, Eq_width_errs
     else:
-        for i in range(1, len(ref_wavelength)):        
-            Eq_width += (ref_wavelength[i]-ref_wavelength[i-1]) * (p_continuum(ref_wavelength)[i]-interp_flux_vals[i])
-            
-        return Eq_width
+        return Eq_widths
 
 
-def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, guess_bounds, x, y, y_err, c, wav_ranges, param_names, plot=True, N=100):
+def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess, guess_bounds, x, y, y_err, wav_ranges, param_names, method_lmfit, plot=True, N=100, K=500):
     '''
     Routine to fit a function, fit_func, to a spectral line located in the wavelength range [low_lim, up_lim].
     We give as input a guess for the best-fit parameters and the acceptable bounds within which the algorithm
@@ -590,20 +621,20 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, 
     :param fit_func: function, that we want to fit the spectral line with.
     :param low_lim: float, lower limit of the wavelength range we want to fit over.
     :param upper_lim: float, upper limit of the wavelength range we want to fit over.
-    :param low_lim_ew: float, lower limit of the wavelength range we want to calculate the equivalent width over.
-    :param upper_lim_ew: float, upper limit of the wavelength range we want to calculate the equivalent width over.
+    :param low_lim_ews: list, lower limits of the wavelength ranges we want to calculate the equivalent widths over.
+    :param upper_lim_ews: float, upper limits of the wavelength ranges we want to calculate the equivalent widths over.
     :param ini_guess: array, containing an initial guess/starting point for the best-fit parameter values.
     :param guess_bounds: array, containing the bounds, with respect to the initial guess, 
     within which we search for the best-fit parameters.
     :param x: array, containing the wavelength values.
     :param y: array, containing the data we want to fit(e.g. flux values of spectra).
     :param y_err: array, containing the error values on the data we want to fit.
-    :param c: string, the color of the best-fit model when plotting.
     :param wav_ranges: list of tuples, containing the continuum chunks used for the equivalent width calculation.
     :param param_names: list, containing the name of the parameters in fit_func we want to fit for.
+    :param method_lmfit: string, method to use for lmfit.
     :param plot: bool, whether or not to plot the diagnostic plots.
     :param N: int, number of points to interpolate on for the equivalent width calculation.
-    
+    :param K: int, number of spectra to simulate for the bootstrapping section.
     Returns
     ----------
     :param thetas: array, containing best-fit parameters for the fit to each (x[i], y[i]) pair.
@@ -614,10 +645,10 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, 
     '''
 
     #Initializing the arrays containing the best-fit parameters and the errors on them.
-    thetas = np.ones((len(y), len(ini_guess)+1))
-    lmfit_thetas = np.ones((len(y), len(ini_guess)+1))
-    lmfit_err = np.ones((len(y), len(ini_guess)+1))
-    err = np.ones((len(y), len(ini_guess)+1))
+    thetas = np.ones((len(y), len(ini_guess)+len(low_lim_ews)))
+    lmfit_thetas = np.ones((len(y), len(ini_guess)+len(low_lim_ews)))
+    lmfit_err = np.ones((len(y), len(ini_guess)+len(low_lim_ews)))
+    err = np.ones((len(y), len(ini_guess)+len(low_lim_ews)))
     
     #Looping over all the arrays(/spectra).
     for i in range(5):#len(x)):
@@ -635,61 +666,150 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, 
         else:
             params, cov = curve_fit(fit_func, bound_x, bound_y, p0 = ini_guess, bounds = guess_bounds)
         #Extracting the best-fit parameters and the error on the best-fit parameters.
-        thetas[i][:-1] = params
-        err[i][:-1] = np.sqrt(np.diag(cov))
+        thetas[i][:-len(low_lim_ews)] = params
+        err[i][:-len(low_lim_ews)] = np.sqrt(np.diag(cov))
 
         #Using lmfit
         lm_fit_func = lf.Model(fit_func)
+        
+        #Defining the parameters from the initial guess provided
         param = lf.Parameters()
         for j in range(len(ini_guess)):
             param.add(param_names[j], value=ini_guess[j], min=guess_bounds[0][j], max=guess_bounds[1][j])
-
-        result = lm_fit_func.fit(bound_y, x=bound_x, params=param, weights=1/bound_y_err**2, method='ampgo')
-        print(result.fit_report())
         
-        for h in range(len(ini_guess)):
-            lmfit_thetas[i][h] = result.params[param_names[h]].value
-            lmfit_err[i][h] = result.params[param_names[h]].stderr
+        if method_lmfit !='emcee':
+            #Fitting the main spectrum
+            if len(y_err)!=0:
+                prelim_result = lm_fit_func.fit(bound_y, x=bound_x, params=param, weights=1/bound_y_err**2, method=method_lmfit)
+            else:
+                prelim_result = lm_fit_func.fit(bound_y, x=bound_x, params=param, method=method_lmfit)
+            print(prelim_result.fit_report())
+            
+            #Using bootstrap to estimate the errors on the parameters
+            print('BOOTSTRAPPING')
+            new_flux = bootstrap_generate(bound_y, bound_y_err, K)
+            temp_params = np.zeros((K, len(param_names)))
+            for d in range(len(new_flux)):
+                res = lm_fit_func.fit(new_flux[d], x=bound_x, params=param, weights=1/bound_y_err**2, method=method_lmfit, max_nfev=50000)
+                for s in range(len(param_names)):
+                    temp_params[d][s]=res.params[param_names[s]].value
+
+            print('Error on best-fit parameters are:')
+            erro = np.std(temp_params, axis=0)
+            for s in range(len(param_names)):
+                print(param_names[s], ' ', prelim_result.params[param_names[s]].value, ' +/- ', erro[s])
+            #Storing the best fit values from the non-MCMC fitting method
+            for b in range(len(ini_guess)):
+                lmfit_thetas[i][b] = prelim_result.params[param_names[b]].value
+                if len(y_err)!=0:
+                    lmfit_err[i][b] = prelim_result.params[param_names[b]].stderr
+
+        
+        else:
+            if len(y_err)!=0:
+                prelim_result = lm_fit_func.fit(bound_y, x=bound_x, params=param, weights=1/bound_y_err**2, method='differential_evolution')
+            else:
+                prelim_result = lm_fit_func.fit(bound_y, x=bound_x, params=param, method='differential_evolution')
+            print(prelim_result.fit_report())
+        
+            #Initializing the MCMC at the best fit values of the previous fit
+            new_guess = lf.Parameters()
+            for l in range(len(ini_guess)):
+                new_guess.add(param_names[l], value = prelim_result.params[param_names[l]].value, min = prelim_result.params[param_names[l]].value - (0.5*prelim_result.params[param_names[l]].value), max = prelim_result.params[param_names[l]].value + (0.5*prelim_result.params[param_names[l]].value))
+
+            #Defining the MCMC hyper parameters
+            emcee_kws = dict(nwalkers=24, steps=100000, burn=25000, thin=20, is_weighted=False, progress=True)
+            if len(y_err)!=0:
+                emcee_result = lm_fit_func.fit(bound_y, x=bound_x, params=new_guess, weights=1/bound_y_err**2, method=method_lmfit, fit_kws=emcee_kws)
+            else:
+                emcee_result = lm_fit_func.fit(bound_y, x=bound_x, params=new_guess, method=method_lmfit, fit_kws=emcee_kws)
+            print(emcee_result.fit_report())
+            
+            #Plotting the corner plot
+            emcee_corner = corner.corner(emcee_result.flatchain, labels=emcee_result.var_names, truths=list(emcee_result.params.valuesdict().values()))
+            
+            #Testing the convergence of our walkers
+            
+            #Storing the best fit values from the MCMC
+            for h in range(len(ini_guess)):
+                lmfit_thetas[i][h] = emcee_result.params[param_names[h]].value
+                if len(y_err)!=0:
+                    lmfit_err[i][h] = emcee_result.params[param_names[h]].stderr
 
         #Getting the equivalent width 
         #spectrum_obj = Spectrum1D(flux = bound_y*u.Jy, spectral_axis = bound_x*u.AA)
         #eq_width2 = equivalent_width(spectrum_obj)
         if len(y_err)!=0:
-            eq_width, eq_width_err = equivalent_width_calculator(x[i], y[i], y_err[i], N, wav_ranges, low_lim_ew, up_lim_ew, plot) 
-            thetas[i][-1] = eq_width
-            err[i][-1] = eq_width_err
-            lmfit_err[i][-1] = eq_width_err
+            eq_widths, eq_width_errs = equivalent_width_calculator(x[i], y[i], y_err[i], N, wav_ranges, low_lim_ews, up_lim_ews, plot) 
+            for o in range(len(low_lim_ews)):
+                index = len(ini_guess)+o
+                thetas[i][index] = eq_widths[o]
+                err[i][index] = eq_width_errs[o]
+                lmfit_err[i][index] = eq_width_errs[o]
         
         else:
-            eq_width = equivalent_width_calculator(x[i], y[i], [], N, wav_ranges, low_lim_ew, up_lim_ew, plot) 
-            thetas[i][-1] = eq_width
-        
-        lmfit_thetas[i][-1] = eq_width
+            eq_widths = equivalent_width_calculator(x[i], y[i], [], N, wav_ranges, low_lim_ews, up_lim_ews, plot) 
+            for o in range(len(low_lim_ews)):
+                index = len(ini_guess)+o
+                thetas[i][index] = eq_widths[o]
+                lmfit_thetas[i][index] = eq_widths[o]
     
         #Creating the best-fit model for plotting purposes.
         model_x = np.linspace(low_lim, up_lim, N)
         model_curve_fit = fit_func(model_x, *params)
-        model_lmfit = lm_fit_func.eval(params = result.params, x=model_x)
+        model_lmfit_prelim = lm_fit_func.eval(params = prelim_result.params, x=model_x)
+        if method_lmfit == 'emcee':
+            model_lmfit_emcee = lm_fit_func.eval(params = emcee_result.params, x=model_x)
 
         #Plotting the best-fit model on top of the data.
         if plot:
-            plt.figure(figsize=[8, 5])
+            fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, sharex=True, gridspec_kw={'height_ratios': [3, 1]}, figsize=[11, 5])
             if len(y_err)!=0:
-                plt.errorbar(bound_x, bound_y, yerr=bound_y_err,  fmt='b.', label='data', alpha=0.2)
+                ax1.errorbar(bound_x, bound_y, yerr=bound_y_err,  fmt='b.', label='data', alpha=0.2)
+                ax2.errorbar(bound_x, bound_y, yerr=bound_y_err,  fmt='b.', label='data', alpha=0.2)
             else:
-                plt.plot(bound_x, bound_y, 'b.', label='data', alpha=0.2)
-            plt.plot(model_x, model_curve_fit, c, label='Curve fit')
-            plt.plot(model_x, model_lmfit, '-', color='darkgreen', label='Lmfit')
-            plt.axvline(air2vac(10827.091)+((result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.)-result.params['ranges'].value, color='k', linestyle='--')
-            plt.axvline(air2vac(10827.091)+((result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.)+result.params['ranges'].value, color='k', linestyle='--')
-            plt.axvline(air2vac(10827.091) + ((result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.), color='r', linestyle='--')
-            plt.xlabel('Wavelength ($\AA$)')
-            plt.ylabel('Normalized Flux')
-            plt.ylim(0.1, 1.1)
-            plt.legend()
+                ax1.plot(bound_x, bound_y, 'b.', label='data', alpha=0.2)
+                ax2.plot(bound_x, bound_y, 'b.', label='data', alpha=0.2)
+            ax1.plot(model_x, model_curve_fit, 'r', label='Curve fit')
+            if method_lmfit == 'emcee':
+                ax2.plot(model_x, model_lmfit_emcee, '-', color='darkgreen', label='Lmfit MCMC')
+            ax2.plot(model_x, model_lmfit_prelim, '-', color='orange', label='Lmfit Preliminary')
+            ax3.plot(bound_x, bound_y - fit_func(bound_x, *params), 'r.')
+            ax4.plot(bound_x, bound_y - lm_fit_func.eval(params = prelim_result.params, x=bound_x), '.', color='orange')
+            if method_lmfit == 'emcee':
+                ax4.plot(bound_x, bound_y - lm_fit_func.eval(params = emcee_result.params, x=bound_x), '.', color='darkgreen')
+            
+            ax1.axvline(air2vac(10827.091)+((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.)-prelim_result.params['ranges'].value, color='k', linestyle='--', label='Breakpoints')
+            ax1.axvline(air2vac(10827.091)+((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.)+prelim_result.params['ranges'].value, color='k', linestyle='--', label='Si position')
+            ax1.axvline(air2vac(10827.091) + ((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.), color='r', linestyle='--')
+            ax1.axvline(10832.057472+prelim_result.params['RV_offset_He'].value, color='k', linestyle='--', label='He position')
+            ax1.axvline(10833.216751+prelim_result.params['RV_offset_He'].value, color='k', linestyle='--')
+            ax1.axvline(10833.306444+prelim_result.params['RV_offset_He'].value, color='k', linestyle='--')
+            
+            ax2.axvline(air2vac(10827.091)+((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.)-prelim_result.params['ranges'].value, color='k', linestyle='--')
+            ax2.axvline(air2vac(10827.091)+((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.)+prelim_result.params['ranges'].value, color='k', linestyle='--')
+            ax2.axvline(air2vac(10827.091) + ((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.), color='r', linestyle='--')
+            ax1.axvline(10832.057472+prelim_result.params['RV_offset_He'].value, color='k')
+            ax1.axvline(10833.216751+prelim_result.params['RV_offset_He'].value, color='k')
+            ax1.axvline(10833.306444+prelim_result.params['RV_offset_He'].value, color='k')
+            
+            ax3.set_xlabel('Wavelength ($\AA$)')
+            ax4.set_xlabel('Wavelength ($\AA$)')
+            ax1.set_ylabel('Normalized Flux')
+            ax2.set_ylabel('Normalized Flux')
+            ax4.set_ylabel('Residuals')
+            ax3.set_ylabel('Residuals')
+            ax1.legend()
+            ax2.legend()
             for j in range(len(thetas[i])):
                 print(thetas[i][j], err[i][j])
+            plt.subplots_adjust(hspace=0)
             plt.show()
+            print('Standard deviation of Curve fit residuals:', np.std(bound_y - fit_func(bound_x, *params)))
+            print('Standard deviation of Preliminary residuals:', np.std(bound_y - lm_fit_func.eval(params = prelim_result.params, x=bound_x)))
+            if method_lmfit == 'emcee':
+                print('Standard deviation of MCMC residuals:', np.std(bound_y - lm_fit_func.eval(params = emcee_result.params, x=bound_x)))
+            
 
     return thetas, err, lmfit_thetas, lmfit_err
 
