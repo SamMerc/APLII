@@ -611,7 +611,7 @@ def equivalent_width_calculator(wavelength, flux_vals, flux_errs, N, wav_ranges,
         return Eq_widths
 
 
-def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess, guess_bounds, x, y, y_err, wav_ranges, param_names, method_lmfit, plot=True, N=100, K=500):
+def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess, guess_bounds, x, y, y_err, wav_ranges, param_names, method_lmfit, plot=True, N=100, K=2):
     '''
     Routine to fit a function, fit_func, to a spectral line located in the wavelength range [low_lim, up_lim].
     We give as input a guess for the best-fit parameters and the acceptable bounds within which the algorithm
