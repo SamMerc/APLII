@@ -651,7 +651,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
     err = np.ones((len(y), len(ini_guess)+len(low_lim_ews)))
     
     #Looping over all the arrays(/spectra).
-    for i in range(5):#len(x)):
+    for i in range(1):#len(x)):
         
         #Creating the bound versions of the x[i], y[i] and y_err[i] arrays. Bound over the 
         # wavelength range of interest.
@@ -660,6 +660,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
         if len(y_err)!=0:
             bound_y_err = bound(low_lim, up_lim, x[i], y_err[i])
         
+        print('curve fitting')
         #Using the curve_fit function from scipy to fit the function of interest to the data.
         if len(y_err)!=0:
             params, cov = curve_fit(fit_func, bound_x, bound_y, sigma=bound_y_err, p0 = ini_guess, bounds = guess_bounds)
@@ -669,6 +670,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
         thetas[i][:-len(low_lim_ews)] = params
         err[i][:-len(low_lim_ews)] = np.sqrt(np.diag(cov))
 
+        print('lm fitting')
         #Using lmfit
         lm_fit_func = lf.Model(fit_func)
         
@@ -680,29 +682,36 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
         if method_lmfit !='emcee':
             #Fitting the main spectrum
             if len(y_err)!=0:
-                prelim_result = lm_fit_func.fit(bound_y, x=bound_x, params=param, weights=1/bound_y_err**2, method=method_lmfit)
+                prelim_result = lm_fit_func.fit(bound_y, x=bound_x, params=param, weights=1/bound_y_err**2, method=method_lmfit, max_nfev=50000)
             else:
-                prelim_result = lm_fit_func.fit(bound_y, x=bound_x, params=param, method=method_lmfit)
+                prelim_result = lm_fit_func.fit(bound_y, x=bound_x, params=param, method=method_lmfit, max_nfev=50000)
             print(prelim_result.fit_report())
             
             #Using bootstrap to estimate the errors on the parameters
-            print('BOOTSTRAPPING')
-            new_flux = bootstrap_generate(bound_y, bound_y_err, K)
-            temp_params = np.zeros((K, len(param_names)))
-            for d in range(len(new_flux)):
-                res = lm_fit_func.fit(new_flux[d], x=bound_x, params=param, weights=1/bound_y_err**2, method=method_lmfit, max_nfev=50000)
-                for s in range(len(param_names)):
-                    temp_params[d][s]=res.params[param_names[s]].value
+            bootstrap = False
+            if '[[Correlations]]' not in prelim_result.fit_report():
+                bootstrap = True
+                print('BOOTSTRAPPING')
+                new_flux = bootstrap_generate(bound_y, bound_y_err, K)
+                temp_params = np.zeros((K, len(param_names)))
+                for d in range(len(new_flux)):
+                    res = lm_fit_func.fit(new_flux[d], x=bound_x, params=param, weights=1/bound_y_err**2, method=method_lmfit, max_nfev=50000)
+                    for s in range(len(param_names)):
+                        temp_params[d][s]=res.params[param_names[s]].value
 
-            print('Error on best-fit parameters are:')
-            erro = np.std(temp_params, axis=0)
-            for s in range(len(param_names)):
-                print(param_names[s], ' ', prelim_result.params[param_names[s]].value, ' +/- ', erro[s])
+                print('Error on best-fit parameters are:')
+                erro = np.std(temp_params, axis=0)
+                for s in range(len(param_names)):
+                    print(param_names[s], ' ', prelim_result.params[param_names[s]].value, ' +/- ', erro[s])
+            
             #Storing the best fit values from the non-MCMC fitting method
             for b in range(len(ini_guess)):
                 lmfit_thetas[i][b] = prelim_result.params[param_names[b]].value
                 if len(y_err)!=0:
-                    lmfit_err[i][b] = prelim_result.params[param_names[b]].stderr
+                    if bootstrap:
+                        lmfit_err[i][b] = erro[b]
+                    else:
+                        lmfit_err[i][b] = prelim_result.params[param_names[b]].stderr
 
         
         else:
@@ -755,8 +764,20 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
                 lmfit_thetas[i][index] = eq_widths[o]
     
         #Creating the best-fit model for plotting purposes.
+        ## Creating 5 sigma parameter sets
+        sigmap = 10
+        params_sigma_up = np.copy(params)
+        params_sigma_down = np.copy(params)
+        for i in range(len(params)):
+            if param_names[i] in ['log_temp_He', 'log_temp_Si', 'log_density_He', 'log_density_Si']:
+                params_sigma_up[i] += sigmap*np.sqrt(np.diag(cov))
+                params_sigma_down[i] -= sigmap*np.sqrt(np.diag(cov))
+
+        ## Creating models
         model_x = np.linspace(low_lim, up_lim, N)
         model_curve_fit = fit_func(model_x, *params)
+        model_curve_fit_sigma_down = fit_func(model_x, *params_sigma_down)
+        model_curve_fit_sigma_up = fit_func(model_x, *params_sigma_up)
         model_lmfit_prelim = lm_fit_func.eval(params = prelim_result.params, x=model_x)
         if method_lmfit == 'emcee':
             model_lmfit_emcee = lm_fit_func.eval(params = emcee_result.params, x=model_x)
@@ -771,6 +792,8 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
                 ax1.plot(bound_x, bound_y, 'b.', label='data', alpha=0.2)
                 ax2.plot(bound_x, bound_y, 'b.', label='data', alpha=0.2)
             ax1.plot(model_x, model_curve_fit, 'r', label='Curve fit')
+            ax1.plot(model_x, model_curve_fit_sigma_down, 'r.-')
+            ax1.plot(model_x, model_curve_fit_sigma_up, 'r.-')
             if method_lmfit == 'emcee':
                 ax2.plot(model_x, model_lmfit_emcee, '-', color='darkgreen', label='Lmfit MCMC')
             ax2.plot(model_x, model_lmfit_prelim, '-', color='orange', label='Lmfit Preliminary')
@@ -779,19 +802,20 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
             if method_lmfit == 'emcee':
                 ax4.plot(bound_x, bound_y - lm_fit_func.eval(params = emcee_result.params, x=bound_x), '.', color='darkgreen')
             
-            ax1.axvline(air2vac(10827.091)+((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.)-prelim_result.params['ranges'].value, color='k', linestyle='--', label='Breakpoints')
-            ax1.axvline(air2vac(10827.091)+((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.)+prelim_result.params['ranges'].value, color='k', linestyle='--', label='Si position')
-            ax1.axvline(air2vac(10827.091) + ((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.), color='r', linestyle='--')
-            ax1.axvline(10832.057472+prelim_result.params['RV_offset_He'].value, color='k', linestyle='--', label='He position')
-            ax1.axvline(10833.216751+prelim_result.params['RV_offset_He'].value, color='k', linestyle='--')
-            ax1.axvline(10833.306444+prelim_result.params['RV_offset_He'].value, color='k', linestyle='--')
-            
-            ax2.axvline(air2vac(10827.091)+((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.)-prelim_result.params['ranges'].value, color='k', linestyle='--')
-            ax2.axvline(air2vac(10827.091)+((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.)+prelim_result.params['ranges'].value, color='k', linestyle='--')
-            ax2.axvline(air2vac(10827.091) + ((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.), color='r', linestyle='--')
-            ax1.axvline(10832.057472+prelim_result.params['RV_offset_He'].value, color='k')
-            ax1.axvline(10833.216751+prelim_result.params['RV_offset_He'].value, color='k')
-            ax1.axvline(10833.306444+prelim_result.params['RV_offset_He'].value, color='k')
+            if fit_func.__name__ == 'planetary_model':
+                #ax1.axvline(air2vac(10827.091)+((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.)-prelim_result.params['ranges'].value, color='k', linestyle='--', label='Breakpoints')
+                #ax1.axvline(air2vac(10827.091)+((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.)+prelim_result.params['ranges'].value, color='k', linestyle='--')
+                ax1.axvline(air2vac(10827.091) + ((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.), color='r', linestyle='--', label='Si position')
+                ax1.axvline(10832.057472+((prelim_result.params['RV_offset_He'].value*10832.057472)/299792458.), color='k', linestyle='--', label='He position')
+                ax1.axvline(10833.216751+((prelim_result.params['RV_offset_He'].value*10833.216751)/299792458.), color='k', linestyle='--')
+                ax1.axvline(10833.306444+((prelim_result.params['RV_offset_He'].value*10833.306444)/299792458.), color='k', linestyle='--')
+
+                #ax2.axvline(air2vac(10827.091)+((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.)-prelim_result.params['ranges'].value, color='k', linestyle='--')
+                #ax2.axvline(air2vac(10827.091)+((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.)+prelim_result.params['ranges'].value, color='k', linestyle='--')
+                ax2.axvline(air2vac(10827.091) + ((prelim_result.params['RV_offset_Si'].value * air2vac(10827.091))/299792458.), color='r', linestyle='--')
+                ax2.axvline(10832.057472+((prelim_result.params['RV_offset_He'].value*10832.057472)/299792458.), color='k', linestyle='--')
+                ax2.axvline(10833.216751+((prelim_result.params['RV_offset_He'].value*10833.216751)/299792458.), color='k', linestyle='--')
+                ax2.axvline(10833.306444+((prelim_result.params['RV_offset_He'].value*10833.306444)/299792458.), color='k', linestyle='--')
             
             ax3.set_xlabel('Wavelength ($\AA$)')
             ax4.set_xlabel('Wavelength ($\AA$)')
@@ -810,7 +834,6 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
             if method_lmfit == 'emcee':
                 print('Standard deviation of MCMC residuals:', np.std(bound_y - lm_fit_func.eval(params = emcee_result.params, x=bound_x)))
             
-
     return thetas, err, lmfit_thetas, lmfit_err
 
 def fit_spctr_line_special(fit_func, include_ranges, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, guess_bounds, x, y, y_err, c, wav_ranges, param_names, R_power, plot=True, N=100):
