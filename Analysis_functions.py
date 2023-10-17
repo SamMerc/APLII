@@ -499,7 +499,7 @@ def bootstrap_generate(flux, flux_err, k):
     
     return fake_spectra.T
         
-def equivalent_width_calculator(wavelength, flux_vals, flux_errs, N, wav_ranges, low_lims, up_lims, plot):
+def equivalent_width_calculator(wavelength, flux_vals, flux_errs, N, wav_ranges, low_lims, up_lims, plot, order):
     '''
     Routine to calculate the equivalent width of a line.
     Parameters
@@ -512,6 +512,7 @@ def equivalent_width_calculator(wavelength, flux_vals, flux_errs, N, wav_ranges,
     :param low_lims: list, lower limits of the wavelength ranges we want to calculate the equivalent widths over.
     :param up_lims: lisr, upper limits of the wavelength ranges we want to calculate the equivalent widths over.
     :param plot: bool, whether or not to plot the diagnostic plots.
+    :param order: int, order of the polynomial to use to describe the continuum.
     Returns
     ----------
     :param Eq_widths: float, equivalent widths of the lines considered.
@@ -545,7 +546,7 @@ def equivalent_width_calculator(wavelength, flux_vals, flux_errs, N, wav_ranges,
         continuum_spctr = np.array(list(itertools.chain.from_iterable(continuu_spctr)))
         continuum_err = np.array(list(itertools.chain.from_iterable(continuu_err)))
         continuum_wav = np.array(list(itertools.chain.from_iterable(continuu_wav)))
-        p_continuum = np.poly1d(np.polyfit(continuum_wav, continuum_spctr, 1, w=1/continuum_err**2))
+        p_continuum = np.poly1d(np.polyfit(continuum_wav, continuum_spctr, order, w=1/continuum_err**2))
 
         #Debugging
         if plot:
@@ -680,7 +681,7 @@ def breakpoint_resolver(x, T, n, d, RV, R_pow):
     return delta
 
 
-def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess, guess_bounds, x, y, y_err, wav_ranges, param_names, method_lmfit, R_power, plot=True, N=100, K=500):
+def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess, guess_bounds, x, y, y_err, wav_ranges, param_names, method_lmfit, R_power, polynomial_order, plot=True, N=100, K=500):
     '''
     Routine to fit a function, fit_func, to a spectral line located in the wavelength range [low_lim, up_lim].
     We give as input a guess for the best-fit parameters and the acceptable bounds within which the algorithm
@@ -702,6 +703,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
     :param param_names: list, containing the name of the parameters in fit_func we want to fit for.
     :param method_lmfit: string, method to use for lmfit.
     :param R_power: int, instrumental resolving power.
+    :param polynomial_order: int, order of the polynomial to use to describe the continuum used in the EW calculation.
     :param plot: bool, whether or not to plot the diagnostic plots.
     :param N: int, number of points to interpolate on for the equivalent width calculation.
     :param K: int, number of spectra to simulate for the bootstrapping section.
@@ -820,8 +822,9 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
         #Getting the equivalent width 
         #spectrum_obj = Spectrum1D(flux = bound_y*u.Jy, spectral_axis = bound_x*u.AA)
         #eq_width2 = equivalent_width(spectrum_obj)
+        print(polynomial_order)
         if len(y_err)!=0:
-            eq_widths, eq_width_errs = equivalent_width_calculator(x[i], y[i], y_err[i], N, wav_ranges, low_lim_ews, up_lim_ews, plot) 
+            eq_widths, eq_width_errs = equivalent_width_calculator(x[i], y[i], y_err[i], N, wav_ranges, low_lim_ews, up_lim_ews, plot, polynomial_order) 
             for o in range(len(low_lim_ews)):
                 index = len(ini_guess)+o
                 thetas[i][index] = eq_widths[o]
@@ -831,7 +834,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
                     lmfit_err[i][index] = eq_width_errs[o]
         
         else:
-            eq_widths = equivalent_width_calculator(x[i], y[i], [], N, wav_ranges, low_lim_ews, up_lim_ews, plot) 
+            eq_widths = equivalent_width_calculator(x[i], y[i], [], N, wav_ranges, low_lim_ews, up_lim_ews, plot, polynomial_order) 
             for o in range(len(low_lim_ews)):
                 index = len(ini_guess)+o
                 thetas[i][index] = eq_widths[o]
@@ -1233,19 +1236,19 @@ def Correlation_Plot(mode, A, B, A_err, B_err, titleA, titleB, title, day, save=
         ax2.text(0.79, 0.80, textstr_HE, transform=ax2.transAxes, fontsize=12, bbox = dict(facecolor='white', alpha=0.5))
         
         if save:
-            plt.savefig('/Users/samsonmercier/Desktop/Correlation-'+day[-2:]+'/'+title+'-'+day[-2:]+'.pdf')
+            plt.savefig('/Users/samsonmercier/Downloads/'+title+'-'+day[-2:]+'.pdf')
 
     else:
         fig, ax = plt.subplots(1, 1, figsize=[7, 4])
 
         if len(A_err)!=0 and len(B_err)!=0:
-            ax.errorbar(A, B, xerr=A_err, yerr=B_err, fmt='.')
+            ax.errorbar(A, B, xerr=A_err, yerr=B_err, fmt='.', alpha=0.1)
         elif len(A_err)==0 and len(B_err)!=0:
-            ax.errorbar(A, B, yerr=B_err, fmt='.')
+            ax.errorbar(A, B, yerr=B_err, fmt='.', alpha=0.1)
         elif len(A_err)!=0 and len(B_err)==0:
-            ax.errorbar(A, B, xerr=A_err, fmt='.')
-        else:
-            ax.plot(A, B, '.')
+            ax.errorbar(A, B, xerr=A_err, fmt='.', alpha=0.1)
+
+        ax.plot(A, B, '.')
 
         ax.set_xlabel(titleA)
         ax.set_ylabel(titleB)
@@ -1254,7 +1257,7 @@ def Correlation_Plot(mode, A, B, A_err, B_err, titleA, titleB, title, day, save=
                             r"$r_S = %.3f$" % (ss.spearmanr(A, B).correlation, )))
         ax.text(0.79, 0.80, textstr, transform=ax.transAxes, fontsize=12, bbox = dict(facecolor='white', alpha=0.5))
         if save:
-            plt.savefig('/Users/samsonmercier/Desktop/'+title+'-'+day[-2:]+'.pdf')
+            plt.savefig('/Users/samsonmercier/Downloads/'+title+'-'+day[-2:]+'.pdf')
 
 
 def new_extraction(location, file_directory, blaze_directory, CCF_directory, telluric_directory, rassine_directory, order, wav_ranges, fit_order, Rassine=False, plot=True):
@@ -1535,6 +1538,7 @@ def new_extraction(location, file_directory, blaze_directory, CCF_directory, tel
             ax1.set_xlim(wav_ranges[0][0]-5, wav_ranges[-1][1]+5)
             ax1.legend()
             fig.subplots_adjust(hspace=0)
+            plt.savefig('/Users/samsonmercier/Downloads/Normalization_'+str(fit_order)+'th_order.pdf')
             plt.show()
 
     #RASSINE
