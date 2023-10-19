@@ -718,8 +718,9 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
 
     #Initializing the arrays containing the best-fit parameters and the errors on them.
     thetas = np.ones((len(y), len(ini_guess)+len(low_lim_ews)))
-    lmfit_thetas = np.ones((len(y), len(ini_guess)+len(low_lim_ews)))
-    lmfit_err = np.ones((len(y), len(ini_guess)+len(low_lim_ews)))
+    if method_lmfit != '':
+        lmfit_thetas = np.ones((len(y), len(ini_guess)+len(low_lim_ews)))
+        lmfit_err = np.ones((len(y), len(ini_guess)+len(low_lim_ews)))
     err = np.ones((len(y), len(ini_guess)+len(low_lim_ews)))
     
     #Looping over all the arrays(/spectra).
@@ -742,7 +743,8 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
         thetas[i][:-len(low_lim_ews)] = best_params
         err[i][:-len(low_lim_ews)] = np.sqrt(np.diag(cov))
         
-        curve_fit_wav1, curve_fit_wav2 = range_calculator(best_params[1], best_params[3], best_params[4], best_params[6], R_power)
+        if fit_func.__name__ == 'planetary_model':
+            curve_fit_wav1, curve_fit_wav2 = range_calculator(best_params[1], best_params[3], best_params[4], best_params[6], R_power)
         
         if method_lmfit != '':
             print('lm fitting')
@@ -823,6 +825,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
         #spectrum_obj = Spectrum1D(flux = bound_y*u.Jy, spectral_axis = bound_x*u.AA)
         #eq_width2 = equivalent_width(spectrum_obj)
         print(polynomial_order)
+        
         if len(y_err)!=0:
             eq_widths, eq_width_errs = equivalent_width_calculator(x[i], y[i], y_err[i], N, wav_ranges, low_lim_ews, up_lim_ews, plot, polynomial_order) 
             for o in range(len(low_lim_ews)):
@@ -911,7 +914,10 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
             
             plt.subplots_adjust(hspace=0)
             plt.show()
-            print('Standard deviation of Curve fit residuals:', np.std(bound_y - fit_func(bound_x, *best_params)), ' and corresponding chi-squared:', chisquared(fit_func(bound_x, *best_params), bound_y, bound_y_err), ' and reduced chi-squared:', chisquared(fit_func(bound_x, *best_params), bound_y, bound_y_err)/(len(bound_x)+len(ini_guess)))
+            if len(y_err)!=0:
+                print('Standard deviation of Curve fit residuals:', np.std(bound_y - fit_func(bound_x, *best_params)), ' and corresponding chi-squared:', chisquared(fit_func(bound_x, *best_params), bound_y, bound_y_err), ' and reduced chi-squared:', chisquared(fit_func(bound_x, *best_params), bound_y, bound_y_err)/(len(bound_x)+len(ini_guess)))
+            else:
+                print('Standard deviation of Curve fit residuals:', np.std(bound_y - fit_func(bound_x, *best_params)))
             
             if method_lmfit != '':
                 print('Standard deviation of Preliminary residuals:', np.std(bound_y - lm_fit_func.eval(params = prelim_result.params, x=bound_x)))

@@ -77,3 +77,17 @@ def spectrum_he_and_Si_Complex(wavelength, I,  He_temperature, Si_temperature, H
         
     return Intensity * etau + snu * (1.0 - etau)
 
+def spectrum_H2O(wavelength, I,  H2O_temperature, H2O_density, vsini, medium, RV_offset_H2O, H2O_delta_damping, R_pow = None, micro_t = None) :
+    
+    # Your spectrum
+    Intensity = deepcopy(I)
+
+
+    # Only absorption, no emission
+    etau = lm.H2O_line_wav(wavelength, H2O_temperature, H2O_density, vsini, H2O_delta_damping, medium, R_pow, micro_t, RV_offset_H2O)
+    snu = 0.0
+
+        
+        
+    return Intensity * etau + snu * (1.0 - etau)
+

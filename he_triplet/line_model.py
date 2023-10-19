@@ -15,12 +15,14 @@ factor = elec_ch**2/(4*Eps_0*m_e* c_light_m)    # m**2 / s
 amu=1.660531e-27    # kg
 m_he = 4.002602 * amu
 m_si = 28.0855 * amu
+m_H2O = 18.0151 * amu
 
 k_boltz=1.3806488e-23   # m2 kg s-2 K-1
 h_planck=6.62606957e-34  # kg m2 s-1
 
 Aki_He = 1.0216e+07
 Aki_Si = 1.97e+07 # s-1
+#Aki_H2O = 
 
 f_osc_si = 3.47e-1
 f_oscHe = {'He1' : 5.9902e-02,'He2': 1.7974e-01,'He3': 2.9958e-01}
@@ -95,6 +97,27 @@ def Si_line_wav(x, T,n_col, v_sini,delta_d, medium, R_pow, micro_t, RV_offset):
 
     elif medium =="VACUUM":
         return_value *= abs_line_wav(x,f_osc_si,T, n_col, v_sini, m_si, ref_wav_Si_vacuum,delta_d, Aki_Si, R_pow, micro_t, RV_offset)
+
+    return return_value
+
+def H2O_line_wav(x, T,n_col, v_sini,delta_d, medium, R_pow, micro_t, RV_offset):
+
+    '''
+    
+    - medium is either air ou vacuum. This depend on the data you are working with.
+
+    - choice is to choose which He line to include.
+        By default the three lines are used.
+        
+    '''
+
+    return_value = 1.
+
+    if medium == "AIR":
+        return_value *= abs_line_wav(x,f_osc_H2O,T, n_col, v_sini, m_H2O, ref_wav_H2O_air,delta_d, Aki_H2O, R_pow, micro_t, RV_offset)
+
+    elif medium =="VACUUM":
+        return_value *= abs_line_wav(x,f_osc_H2O,T, n_col, v_sini, m_H2O, ref_wav_H2O_vacuum,delta_d, Aki_H2O, R_pow, micro_t, RV_offset)
 
     return return_value
 
