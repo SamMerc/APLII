@@ -1569,8 +1569,8 @@ def new_extraction(location, file_directory, blaze_directory, CCF_directory, tel
                 obj = pd.read_pickle(rassine_directory+'-HA/STACKED/RASSINE_prepared_rassine_'+str(l)+'.p')
                 rassine_total_lamda_HA[l] = obj['wave']
                 rassine_total_norm_spctr_HA[l] = obj['flux']/obj['matching_diff']['continuum_linear']
-                interpol_err = interp1d(total_lamda[l], total_norm_err[l]**2, kind='cubic', fill_value='extrapolate')
-                rassine_total_norm_err_HA[l] = np.sqrt(interpol_err(rassine_total_lamda_HA[l]))
+                interpol_err = interp1d(total_lamda[i], total_norm_err[i]**2, kind='cubic', fill_value='extrapolate')
+                rassine_total_norm_err_HA[l] = np.sqrt(interpol_err(master_wav_HA))
             
             #HE
             for name in os.listdir(rassine_directory+'-HE/MASTER/'):
@@ -1587,8 +1587,8 @@ def new_extraction(location, file_directory, blaze_directory, CCF_directory, tel
                 obj = pd.read_pickle(rassine_directory+'-HE/STACKED/RASSINE_prepared_rassine_'+str(l)+'.p')
                 rassine_total_lamda_HE[l] = obj['wave']
                 rassine_total_norm_spctr_HE[l] = obj['flux']/obj['matching_diff']['continuum_linear']
-                interpol_err = interp1d(total_lamda[l], total_norm_err[l]**2, kind='cubic', fill_value='extrapolate')
-                rassine_total_norm_err_HE[l] = np.sqrt(interpol_err(rassine_total_lamda_HE[l]))
+                interpol_err = interp1d(total_lamda[i], total_norm_err[i]**2, kind='cubic', fill_value='extrapolate')
+                rassine_total_norm_err_HE[l] = np.sqrt(interpol_err(master_wav_HE))
             
             return total_lamda, rassine_total_lamda_HA, rassine_total_lamda_HE, master_wav_HA, master_wav_HE, total_spctr, total_norm_spctr, rassine_total_norm_spctr_HA, rassine_total_norm_spctr_HE, norm_master_spctr_HA, norm_master_spctr_HE, total_err, total_norm_err, rassine_total_norm_err_HA, rassine_total_norm_err_HE, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM, total_telluric
 
