@@ -743,7 +743,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
         thetas[i][:-len(low_lim_ews)] = best_params
         err[i][:-len(low_lim_ews)] = np.sqrt(np.diag(cov))
         
-        if fit_func.__name__ == 'planetary_model':
+        if fit_func.__name__ == 'planetary_model' or fit_func.__name__ [:-3] == 'planetary_model':
             curve_fit_wav1, curve_fit_wav2 = range_calculator(best_params[1], best_params[3], best_params[4], best_params[6], R_power)
         
         if method_lmfit != '':
@@ -873,8 +873,13 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
                 if method_lmfit != '':
                     ax2.plot(bound_x, bound_y, 'b.', label='data', alpha=0.2)
             
-            ax1.plot(model_x, model_curve_fit, 'r', label='Curve fit')
-            ax3.plot(bound_x, bound_y - fit_func(bound_x, *best_params), 'r.')
+            if fit_func.__name__[-2:] == 'HE':
+                ax1.plot(model_x, model_curve_fit, 'm', label='Curve fit')
+                ax3.plot(bound_x, bound_y - fit_func(bound_x, *best_params), 'm.')
+            else:
+                ax1.plot(model_x, model_curve_fit, 'r', label='Curve fit')
+                ax3.plot(bound_x, bound_y - fit_func(bound_x, *best_params), 'r.')
+                
             if method_lmfit != '':
                 if method_lmfit == 'emcee':
                     ax2.plot(model_x, model_lmfit_emcee, '-', color='darkgreen', label='Lmfit MCMC')
@@ -883,7 +888,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
                 if method_lmfit == 'emcee':
                     ax4.plot(bound_x, bound_y - lm_fit_func.eval(params = emcee_result.params, x=bound_x), '.', color='darkgreen')
             
-            if fit_func.__name__ == 'planetary_model':
+            if fit_func.__name__ == 'planetary_model' or fit_func.__name__ [:-3] == 'planetary_model':
                 ax1.axvline(air2vac(10827.091) + ((best_params[6] * air2vac(10827.091))/299792458.), color='r', linestyle='--', label='Si position')
                 ax1.axvspan(curve_fit_wav1[0], curve_fit_wav2[0], color='black', alpha=0.1)
                 
