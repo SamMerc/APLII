@@ -420,23 +420,23 @@ def bound(low, high, ref_L, L):
     return temp3
 
 #Change the order of the parameters here and everywhere else in the other codes
-def gaussian_L(x, A, offset, mu, std, lin):
+def gaussian_L(x, Amp, mu, std, lin, offset):
     '''
     Function describing a Gaussian with a linear trend that we can fit to spectral lines.
     Parameters
     ----------
     :param x: array, values used to evaluate the linear-trend Gaussian.
     :param A: float, depth/amplitude of the Gaussian.
-    :param offset: float, offset term of the linear trend.
     :param mu: float, position/expected value of the Gaussian.
     :param std: float, width/standard deviation of the Gaussian.
     :param lin: float, linear term of the linear trend.
+    :param offset: float, offset term of the linear trend.
     Returns
     ----------
     :param Gauss_l: array, containing the linear-trend Gaussian values.
     '''
     # Making the Gaussian distribution
-    Gauss_l = (A * np.exp(-0.5*((x-mu)/std)**2)) + (lin*x+offset)
+    Gauss_l = (Amp * np.exp(-0.5*((x-mu)/std)**2)) + (lin*x+offset)
     return Gauss_l
 
 def Voigt(x, offset, depth, center, sig, gam):
@@ -538,21 +538,29 @@ def equivalent_width_calculator(wavelength, flux_vals, flux_errs, N, wav_ranges,
         continuu_err = []
         for x in wav_ranges:
             contin_spctr = bound(x[0], x[1], wavelength, flux_vals)
-            contin_err = bound(x[0], x[1], wavelength, flux_errs)
+            if len(flux_errs)!=0:
+                contin_err = bound(x[0], x[1], wavelength, flux_errs)
             contin_wav = bound(x[0], x[1], wavelength, wavelength)
             continuu_spctr.append(contin_spctr)
             continuu_wav.append(contin_wav)
-            continuu_err.append(contin_err)
+            if len(flux_errs)!=0:
+                continuu_err.append(contin_err)
         continuum_spctr = np.array(list(itertools.chain.from_iterable(continuu_spctr)))
-        continuum_err = np.array(list(itertools.chain.from_iterable(continuu_err)))
+        if len(flux_errs)!=0:
+            continuum_err = np.array(list(itertools.chain.from_iterable(continuu_err)))
         continuum_wav = np.array(list(itertools.chain.from_iterable(continuu_wav)))
-        p_continuum = np.poly1d(np.polyfit(continuum_wav, continuum_spctr, order, w=1/continuum_err**2))
-
+        if len(flux_errs)!=0:
+            p_continuum = np.poly1d(np.polyfit(continuum_wav, continuum_spctr, order, w=1/continuum_err**2))
+        else:
+            p_continuum = np.poly1d(np.polyfit(continuum_wav, continuum_spctr, order))
         #Debugging
         if plot:
             #Plotting the continuum chunks
             plt.figure(figsize=[8, 5])
-            plt.errorbar(wavelength, flux_vals, yerr=flux_errs, label='Data')
+            if len(flux_errs)!=0:
+                plt.errorbar(wavelength, flux_vals, yerr=flux_errs, label='Data')
+            else:
+                plt.plot(wavelength, flux_vals, label='Data')
             plt.plot(wavelength, p_continuum(wavelength), color='orange', label='Polyn. model')
             for i, x in enumerate(wav_ranges):
                 plt.axvline(x[0], color='r', linestyle='--')
@@ -575,7 +583,10 @@ def equivalent_width_calculator(wavelength, flux_vals, flux_errs, N, wav_ranges,
 
             #Plotting the equivalent width calculation
             plt.figure(figsize=[8, 5])
-            plt.errorbar(bound_wav, bound_flux, yerr=bound_errs, fmt='b.-', label='Data')
+            if len(flux_errs)!=0:
+                plt.errorbar(bound_wav, bound_flux, yerr=bound_errs, fmt='b.-', label='Data')
+            else:
+                plt.plot(bound_wav, bound_flux, 'b.-', label='Data')
             plt.plot(wavelength, p_continuum(wavelength), 'k--', label='Continuum level')
             plt.xlabel('Wavelength ($\AA$)')
             plt.ylabel('Normalized Flux')
@@ -721,7 +732,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
     if method_lmfit != '':
         lmfit_thetas = np.ones((len(y), len(ini_guess)+len(low_lim_ews)))
         lmfit_err = np.ones((len(y), len(ini_guess)+len(low_lim_ews)))
-    err = np.ones((len(y), len(ini_guess)+len(low_lim_ews)))
+    err = np.zeros((len(y), len(ini_guess)+len(low_lim_ews)))
     
     #Looping over all the arrays(/spectra).
     for i in range(len(x)):
@@ -1184,7 +1195,7 @@ def SNR_calculator(low, high, tot_lamda, tot_spctr, tot_err):
         
     return measured_SNR
 
-def Correlation_Plot(mode, A, B, A_err, B_err, titleA, titleB, title, day, save=True):
+def Correlation_Plot(mode, A, B, A_err, B_err, titleA, titleB, title, day, save_loc='/Users/samsonmercier/Downloads/', save=True):
     '''
     Function to create a correlation plot between two arrays A and B.
     Parameters
@@ -1248,7 +1259,7 @@ def Correlation_Plot(mode, A, B, A_err, B_err, titleA, titleB, title, day, save=
         ax2.text(0.79, 0.80, textstr_HE, transform=ax2.transAxes, fontsize=12, bbox = dict(facecolor='white', alpha=0.5))
         
         if save:
-            plt.savefig('/Users/samsonmercier/Downloads/'+title+'-'+day[-2:]+'.pdf')
+            plt.savefig(save_loc+title+'-'+day[-2:]+'.pdf')
 
     else:
         fig, ax = plt.subplots(1, 1, figsize=[7, 4])
@@ -1269,10 +1280,10 @@ def Correlation_Plot(mode, A, B, A_err, B_err, titleA, titleB, title, day, save=
                             r"$r_S = %.3f$" % (ss.spearmanr(A, B).correlation, )))
         ax.text(0.79, 0.80, textstr, transform=ax.transAxes, fontsize=12, bbox = dict(facecolor='white', alpha=0.5))
         if save:
-            plt.savefig('/Users/samsonmercier/Downloads/'+title+'-'+day[-2:]+'.pdf')
+            plt.savefig(save_loc+title+'-'+day[-2:]+'.pdf')
 
 
-def new_extraction(location, file_directory, blaze_directory, CCF_directory, telluric_directory, rassine_directory, order, wav_ranges, fit_order, Rassine=False, plot=True):
+def new_extraction(location, file_directory, blaze_directory, CCF_directory, telluric_directory, rassine_directory, order, wav_ranges, fit_order, save_location='/Users/samsonmercier/Downloads/', Rassine=False, plot=True):
     '''
     Function to extract the important quantities from the FITS files for a given day of solar observations.
     Parameters
@@ -1550,7 +1561,7 @@ def new_extraction(location, file_directory, blaze_directory, CCF_directory, tel
             ax1.set_xlim(wav_ranges[0][0]-5, wav_ranges[-1][1]+5)
             ax1.legend()
             fig.subplots_adjust(hspace=0)
-            plt.savefig('/Users/samsonmercier/Downloads/Normalization_'+str(fit_order)+'th_order.pdf')
+            plt.savefig(save_location + 'Normalization_'+str(fit_order)+'th_order.pdf')
             plt.show()
 
     #RASSINE
