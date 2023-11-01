@@ -499,7 +499,7 @@ def bootstrap_generate(flux, flux_err, k):
     
     return fake_spectra.T
         
-def equivalent_width_calculator(wavelength, flux_vals, flux_errs, continuum, N, wav_ranges, low_lims, up_lims, plot, order, Rassine):
+def equivalent_width_calculator(wavelength, flux_vals, flux_errs, continuum, low_lims, up_lims, plot):
     '''
     Routine to calculate the equivalent width of a line.
     Parameters
@@ -507,12 +507,10 @@ def equivalent_width_calculator(wavelength, flux_vals, flux_errs, continuum, N, 
     :param wavelength: array, wavelength range over which the line is present.
     :param flux_vals: array, flux values over the considered wavelength range.
     :param flux_errs: array, error on the flux values.
-    :param N: int, number of points to interpolate on for a better determination.
-    :param wav_ranges: list of tuples, containing the continuum chunks used for the equivalent width calculation.
+    :param continuum: array, containing the flux values used for the reference continuum.
     :param low_lims: list, lower limits of the wavelength ranges we want to calculate the equivalent widths over.
     :param up_lims: lisr, upper limits of the wavelength ranges we want to calculate the equivalent widths over.
     :param plot: bool, whether or not to plot the diagnostic plots.
-    :param order: int, order of the polynomial to use to describe the continuum.
     Returns
     ----------
     :param Eq_widths: float, equivalent widths of the lines considered.
@@ -528,127 +526,51 @@ def equivalent_width_calculator(wavelength, flux_vals, flux_errs, continuum, N, 
         up_lim = up_lims[n]
         
         bound_wav = bound(low_lim, up_lim, wavelength, wavelength)
-
-        if Rassine: 
-            bound_continuum = bound(low_lim, up_lim, wavelength, continuum)
-            bound_flux = bound(low_lim, up_lim, wavelength, r_r_y)
-            if len(r_r_y_err)!=0:
-                bound_errs = bound(low_lim, up_lim, wavelength, r_r_y_err)
-                
-            if plot:
-                #Plotting the continuum
-                plt.figure(figsize=[8, 5])
-                if len(r_r_y_err)!=0:
-                    plt.errorbar(wavelength, r_r_y, yerr=r_r_y_err, label='Data')
-                else:
-                    plt.plot(wavelength, r_r_y, label='Data')
-                
-                plt.plot(wavelength, continuum, label='Continuum')
-                plt.axvline(10833.2, color='red', label='He triplet location')
-                plt.axvline(10833.3, color='red')
-                plt.axvline(10832.1, color='red')
-                plt.axvline(10830.1, color='green')
-                plt.axvline(10830.1, color='green', label='Si line location')
-                plt.ylabel('Normalized Flux')
-                plt.xlabel('Wavelength ($\AA$)')
-                plt.xlim(wav_ranges[0][0]-5, wav_ranges[-1][1]+5)
-                plt.legend()
-                plt.show()
-                
-                #Plotting the equivalent width calculation
-                plt.figure(figsize=[8, 5])
-                if len(flux_errs)!=0:
-                    plt.errorbar(bound_wav, bound_flux, yerr=bound_errs, fmt='b.-', label='Data')
-                else:
-                    plt.plot(bound_wav, bound_flux, 'b.-', label='Data')
-                plt.plot(wavelength, continuum, 'k--', label='Continuum level')
-                plt.xlabel('Wavelength ($\AA$)')
-                plt.ylabel('Normalized Flux')
-                plt.xlim(low_lim, up_lim)
-                plt.title('Equivalent Width plot')
-                plt.legend()
-                plt.show()
-                
-            #Defining the continuum to use
-            use_continuum = bound_continuum
-        else:
-            bound_flux = bound(low_lim, up_lim, wavelength, flux_vals)
-            if len(flux_errs)!=0:
-                bound_errs = bound(low_lim, up_lim, wavelength, flux_errs)
-
-            ##Retrieving the spectrum, error and wavelengths in these ranges
-            continuu_spctr = []
-            continuu_wav = []
-            continuu_err = []
-            for x in wav_ranges:
-                contin_spctr = bound(x[0], x[1], wavelength, flux_vals)
-                if len(flux_errs)!=0:
-                    contin_err = bound(x[0], x[1], wavelength, flux_errs)
-                contin_wav = bound(x[0], x[1], wavelength, wavelength)
-                continuu_spctr.append(contin_spctr)
-                continuu_wav.append(contin_wav)
-                if len(flux_errs)!=0:
-                    continuu_err.append(contin_err)
-            continuum_spctr = np.array(list(itertools.chain.from_iterable(continuu_spctr)))
-            if len(flux_errs)!=0:
-                continuum_err = np.array(list(itertools.chain.from_iterable(continuu_err)))
-            continuum_wav = np.array(list(itertools.chain.from_iterable(continuu_wav)))
-            if len(flux_errs)!=0:
-                p_continuum = np.poly1d(np.polyfit(continuum_wav, continuum_spctr, order, w=1/continuum_err**2))
-            else:
-                p_continuum = np.poly1d(np.polyfit(continuum_wav, continuum_spctr, order))
-                
-            #Defining the continuum to use
-            use_continuum = p_continuum(bound_wav)
-            
-            #Debugging
-            if plot:
-                #Plotting the continuum chunks
-                plt.figure(figsize=[8, 5])
-                if len(flux_errs)!=0:
-                    plt.errorbar(wavelength, flux_vals, yerr=flux_errs, label='Data')
-                else:
-                    plt.plot(wavelength, flux_vals, label='Data')
-                plt.plot(wavelength, p_continuum(wavelength), color='orange', label='Polyn. model')
-                for i, x in enumerate(wav_ranges):
-                    plt.axvline(x[0], color='r', linestyle='--')
-                    plt.axvline(x[1], color='r', linestyle='--')
-                    if i==0:
-                        plt.axvspan(x[0], x[1], color='r', alpha=0.3, label='Continuum Range')
-                    else:
-                        plt.axvspan(x[0], x[1], color='r', alpha=0.3)
-
-                plt.axvline(10833.2, color='red', label='He triplet location')
-                plt.axvline(10833.3, color='red')
-                plt.axvline(10832.1, color='red')
-                plt.axvline(10830.1, color='green')
-                plt.axvline(10830.1, color='green', label='Si line location')
-                plt.ylabel('Normalized Flux')
-                plt.xlabel('Wavelength ($\AA$)')
-                plt.xlim(wav_ranges[0][0]-5, wav_ranges[-1][1]+5)
-                plt.legend()
-                plt.show()
-
-                #Plotting the equivalent width calculation
-                plt.figure(figsize=[8, 5])
-                if len(flux_errs)!=0:
-                    plt.errorbar(bound_wav, bound_flux, yerr=bound_errs, fmt='b.-', label='Data')
-                else:
-                    plt.plot(bound_wav, bound_flux, 'b.-', label='Data')
-                plt.plot(wavelength, p_continuum(wavelength), 'k--', label='Continuum level')
-                plt.xlabel('Wavelength ($\AA$)')
-                plt.ylabel('Normalized Flux')
-                plt.xlim(low_lim, up_lim)
-                plt.title('Equivalent Width plot')
-                plt.legend()
-                plt.show()
+        bound_continuum = bound(low_lim, up_lim, wavelength, continuum)
+        bound_flux = bound(low_lim, up_lim, wavelength, flux_vals)
+        if len(flux_errs)!=0:
+            bound_errs = bound(low_lim, up_lim, wavelength, flux_errs)
         
+        if plot:
+            #Plotting the continuum
+            plt.figure(figsize=[8, 5])
+            if len(flux_errs)!=0:
+                plt.errorbar(wavelength, flux_vals, yerr=flux_errs, label='Data')
+            else:
+                plt.plot(wavelength, flux_vals, label='Data')
+
+            plt.plot(wavelength, continuum, label='Continuum')
+            plt.axvline(10833.2, color='red', label='He triplet location')
+            plt.axvline(10833.3, color='red')
+            plt.axvline(10832.1, color='red')
+            plt.axvline(10830.1, color='green')
+            plt.axvline(10830.1, color='green', label='Si line location')
+            plt.ylabel('Normalized Flux')
+            plt.xlabel('Wavelength ($\AA$)')
+            plt.xlim(10800, 10860)
+            plt.legend()
+            plt.show()
+
+            #Plotting the equivalent width calculation
+            plt.figure(figsize=[8, 5])
+            if len(flux_errs)!=0:
+                plt.errorbar(bound_wav, bound_flux, yerr=bound_errs, fmt='b.-', label='Data')
+            else:
+                plt.plot(bound_wav, bound_flux, 'b.-', label='Data')
+            plt.plot(wavelength, continuum, 'k--', label='Continuum level')
+            plt.xlabel('Wavelength ($\AA$)')
+            plt.ylabel('Normalized Flux')
+            plt.xlim(low_lim, up_lim)
+            plt.title('Equivalent Width plot')
+            plt.legend()
+            plt.show()
+                    
         #Approximating the equivalent width as the sum
         Eq_width = 0.0
         Eq_width_err = 0.0
 
         for i in range(1, len(bound_wav)):        
-            Eq_width += (bound_wav[i]-bound_wav[i-1]) * (use_continuum[i]-bound_flux[i])
+            Eq_width += (bound_wav[i]-bound_wav[i-1]) * (bound_continuum[i]-bound_flux[i])
             if len(flux_errs)!=0:
                 Eq_width_err += (bound_wav[i]-bound_wav[i-1])**2 * bound_errs[i]**2
 
@@ -740,7 +662,7 @@ def breakpoint_resolver(x, T, n, d, RV, R_pow):
     return delta
 
 
-def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess, guess_bounds, x, y, y_err, wav_ranges, param_names, method_lmfit, R_power, polynomial_order, Rassine=True, plot=True, N=100, K=500):
+def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess, guess_bounds, x, y, y_err, param_names, method_lmfit, R_power, polynomial_order=0, plot=True, K=500):
     '''
     Routine to fit a function, fit_func, to a spectral line located in the wavelength range [low_lim, up_lim].
     We give as input a guess for the best-fit parameters and the acceptable bounds within which the algorithm
@@ -758,13 +680,11 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
     :param x: array, containing the wavelength values.
     :param y: array, containing the data we want to fit(e.g. flux values of spectra).
     :param y_err: array, containing the error values on the data we want to fit.
-    :param wav_ranges: list of tuples, containing the continuum chunks used for the equivalent width calculation.
     :param param_names: list, containing the name of the parameters in fit_func we want to fit for.
     :param method_lmfit: string, method to use for lmfit.
     :param R_power: int, instrumental resolving power.
     :param polynomial_order: int, order of the polynomial to use to describe the continuum used in the EW calculation.
     :param plot: bool, whether or not to plot the diagnostic plots.
-    :param N: int, number of points to interpolate on for the equivalent width calculation.
     :param K: int, number of spectra to simulate for the bootstrapping section.
     Returns
     ----------
@@ -799,17 +719,37 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
             best_params, cov = curve_fit(fit_func, bound_x, bound_y, sigma=bound_y_err, p0 = ini_guess, bounds = guess_bounds)
         else:
             best_params, cov = curve_fit(fit_func, bound_x, bound_y, p0 = ini_guess, bounds = guess_bounds)
+            
         #Extracting the best-fit parameters and the error on the best-fit parameters.
         thetas[i][:-len(low_lim_ews)] = best_params
         err[i][:-len(low_lim_ews)] = np.sqrt(np.diag(cov))
         
-        poly_coefficients = thetas[i][7:len(low_lim_ews)]
-        polynom = np.poly1d(poly_coefficients)
-        
-        cont[i] = polynom(x[i])
         if fit_func.__name__ == 'planetary_model' or fit_func.__name__ [:-3] == 'planetary_model':
+            #Defining the continuum for the EW calculation
+            if polynomial_order == -1:
+                poly_coefficients = [2.0295664961443904e-05, 0.7789323878413897]
+                polynom = np.poly1d(poly_coefficients)
+            else:
+                poly_coefficients = best_params[7:]
+                polynom = np.poly1d(poly_coefficients[::-1])
+
+            cont[i] = polynom(x[i])
+            #Finding best-fit transition wavelengths
             curve_fit_wav1, curve_fit_wav2 = range_calculator(best_params[1], best_params[3], best_params[4], best_params[6], R_power)
-        
+        else:
+            poly_coefficients = []
+            for z, param in enumerate(param_names):
+                if param == 'lin2': 
+                    poly_coefficients.append(best_params[z])
+                if param == 'lin':
+                    poly_coefficients.append(best_params[z])
+                if param == 'offset':
+                    poly_coefficients.append(best_params[z])
+
+            polynom = np.poly1d(poly_coefficients)
+
+            cont[i] = polynom(x[i])
+                    
         if method_lmfit != '':
             print('lm fitting')
             #Using lmfit
@@ -887,11 +827,9 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
 
         #Getting the equivalent width 
         #spectrum_obj = Spectrum1D(flux = bound_y*u.Jy, spectral_axis = bound_x*u.AA)
-        #eq_width2 = equivalent_width(spectrum_obj)
-        print(polynomial_order)
-        
+        #eq_width2 = equivalent_width(spectrum_obj)        
         if len(y_err)!=0:
-            eq_widths, eq_width_errs = equivalent_width_calculator(x[i], y[i], y_err[i], cont[i], N, wav_ranges, low_lim_ews, up_lim_ews, plot, polynomial_order, Rassine) 
+            eq_widths, eq_width_errs = equivalent_width_calculator(x[i], y[i], y_err[i], cont[i], low_lim_ews, up_lim_ews, plot) 
             for o in range(len(low_lim_ews)):
                 index = len(ini_guess)+o
                 thetas[i][index] = eq_widths[o]
@@ -899,9 +837,9 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
                 if method_lmfit != '':
                     lmfit_thetas[i][index]=eq_widths[o]
                     lmfit_err[i][index] = eq_width_errs[o]
-        
+
         else:
-            eq_widths = equivalent_width_calculator(x[i], y[i], [], cont[i], N, wav_ranges, low_lim_ews, up_lim_ews, plot, polynomial_order, Rassine) 
+            eq_widths = equivalent_width_calculator(x[i], y[i], [], cont[i], low_lim_ews, up_lim_ews, plot)
             for o in range(len(low_lim_ews)):
                 index = len(ini_guess)+o
                 thetas[i][index] = eq_widths[o]
@@ -917,9 +855,17 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
             if method_lmfit == 'emcee':
                 model_lmfit_emcee = lm_fit_func.eval(params = emcee_result.params, x=model_x)
 
-        #Displaying results 
-        for j in range(len(thetas[i])):
-                print(thetas[i][j], err[i][j])
+        #Displaying results
+        if fit_func.__name__ == 'planetary_model' or fit_func.__name__ [:-3] == 'planetary_model':
+            new_param_names = param_names + ['He EW', 'Si EW']
+            print('Continuum coeff:', poly_coefficients)
+            for j in range(len(thetas[i])):
+                    print(new_param_names[j], ' :', thetas[i][j], err[i][j])
+        else:
+            print('Continuum coeff:', poly_coefficients)
+            new_param_names = param_names + ['T EW']
+            for j in range(len(thetas[i])):
+                    print(new_param_names[j], ' :', thetas[i][j], err[i][j])
                 
         #Plotting the best-fit model on top of the data.
         if plot:
@@ -993,6 +939,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
                 if method_lmfit == 'emcee':
                     print('Standard deviation of MCMC residuals:', np.std(bound_y - lm_fit_func.eval(params = emcee_result.params, x=bound_x)))
     
+    os.system('say "Finished fitting procedure"')
     if method_lmfit != '':
         return thetas, err, lmfit_thetas, lmfit_err
     else:
@@ -1635,19 +1582,14 @@ def new_extraction(location, file_directory, blaze_directory, CCF_directory, tel
             rassine_total_norm_err_HA = np.zeros((int(len(os.listdir(rassine_directory+'-HA/STACKED'))/2), len(master_wav_HA)))
             rassine_total_lamda_HA = np.zeros((int(len(os.listdir(rassine_directory+'-HA/STACKED'))/2), len(master_wav_HA)))
             rassine_total_continuum_HA = np.zeros((int(len(os.listdir(rassine_directory+'-HA/STACKED'))/2), len(master_wav_HA)))
-            rassine_raw_spctr_HA = np.zeros((int(len(os.listdir(rassine_directory+'-HA/STACKED'))/2), len(master_wav_HA)))
-            rassine_raw_err_HA = np.zeros((int(len(os.listdir(rassine_directory+'-HA/STACKED'))/2), len(master_wav_HA)))
 
             for l in range(int(len(os.listdir(rassine_directory+'-HA/STACKED'))/2)):
                 obj = pd.read_pickle(rassine_directory+'-HA/STACKED/RASSINE_prepared_rassine_'+str(l)+'.p')
                 rassine_total_lamda_HA[l] = obj['wave']
-                rassine_raw_spctr_HA[l] = obj['flux']
                 rassine_total_norm_spctr_HA[l] = obj['flux']/obj['matching_diff']['continuum_linear']
                 rassine_total_continuum_HA[l] = obj['matching_diff']['continuum_linear']
                 interpol_err = interp1d(total_lamda[i], total_norm_err[i]**2, kind='cubic', fill_value='extrapolate')
                 rassine_total_norm_err_HA[l] = np.sqrt(interpol_err(master_wav_HA))
-                interpol_err_raw = interp1d(total_lamda[i], total_err[i]**2, kind='cubic', fill_value='extrapolate')
-                rassine_raw_err_HA[l] = np.sqrt(interpol_err_raw(master_wav_HA))
             
             #HE
             for name in os.listdir(rassine_directory+'-HE/MASTER/'):
@@ -1661,21 +1603,16 @@ def new_extraction(location, file_directory, blaze_directory, CCF_directory, tel
             rassine_total_norm_err_HE = np.zeros((int(len(os.listdir(rassine_directory+'-HE/STACKED'))/2), len(master_wav_HE)))
             rassine_total_lamda_HE = np.zeros((int(len(os.listdir(rassine_directory+'-HE/STACKED'))/2), len(master_wav_HE)))
             rassine_total_continuum_HE = np.zeros((int(len(os.listdir(rassine_directory+'-HE/STACKED'))/2), len(master_wav_HE)))
-            rassine_raw_spctr_HE = np.zeros((int(len(os.listdir(rassine_directory+'-HE/STACKED'))/2), len(master_wav_HE)))
-            rassine_raw_err_HE = np.zeros((int(len(os.listdir(rassine_directory+'-HE/STACKED'))/2), len(master_wav_HE)))
 
             for l in range(int(len(os.listdir(rassine_directory+'-HE/STACKED'))/2)):
                 obj = pd.read_pickle(rassine_directory+'-HE/STACKED/RASSINE_prepared_rassine_'+str(l)+'.p')
                 rassine_total_lamda_HE[l] = obj['wave']
-                rassine_raw_spctr_HE[l] = obj['flux']
                 rassine_total_norm_spctr_HE[l] = obj['flux']/obj['matching_diff']['continuum_linear']
                 rassine_total_continuum_HE[l] = obj['matching_diff']['continuum_linear']
                 interpol_err = interp1d(total_lamda[i], total_norm_err[i]**2, kind='cubic', fill_value='extrapolate')
                 rassine_total_norm_err_HE[l] = np.sqrt(interpol_err(master_wav_HE))
-                interpol_err_raw = interp1d(total_lamda[i], total_err[i]**2, kind='cubic', fill_value='extrapolate')
-                rassine_raw_err_HE[l] = np.sqrt(interpol_err_raw(master_wav_HE))
             
-            return total_lamda, rassine_total_lamda_HA, rassine_total_lamda_HE, master_wav_HA, master_wav_HE, total_spctr, rassine_raw_spctr_HA, rassine_raw_spctr_HE, total_norm_spctr, rassine_total_norm_spctr_HA, rassine_total_norm_spctr_HE, norm_master_spctr_HA, norm_master_spctr_HE, rassine_total_continuum_HA, rassine_total_continuum_HE, total_err, rassine_raw_err_HA, rassine_raw_err_HE, total_norm_err, rassine_total_norm_err_HA, rassine_total_norm_err_HE, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM, total_telluric
+            return total_lamda, rassine_total_lamda_HA, rassine_total_lamda_HE, master_wav_HA, master_wav_HE, total_spctr, total_norm_spctr, rassine_total_norm_spctr_HA, rassine_total_norm_spctr_HE, norm_master_spctr_HA, norm_master_spctr_HE, rassine_total_continuum_HA, rassine_total_continuum_HE, total_err, total_norm_err, rassine_total_norm_err_HA, rassine_total_norm_err_HE, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM, total_telluric
 
         else:
             for name in os.listdir(rassine_directory+'/MASTER/'):
@@ -1689,22 +1626,17 @@ def new_extraction(location, file_directory, blaze_directory, CCF_directory, tel
             rassine_total_norm_err = np.zeros((int(len(os.listdir(rassine_directory+'/STACKED'))/2), len(master_wav)))
             rassine_total_lamda = np.zeros((int(len(os.listdir(rassine_directory+'/STACKED'))/2), len(master_wav)))
             rassine_total_continuum = np.zeros((int(len(os.listdir(rassine_directory+'/STACKED'))/2), len(master_wav)))
-            rassine_raw_spctr = np.zeros((int(len(os.listdir(rassine_directory+'/STACKED'))/2), len(master_wav)))
-            rassine_raw_err = np.zeros((int(len(os.listdir(rassine_directory+'/STACKED'))/2), len(master_wav)))
             for l in range(int(len(os.listdir(rassine_directory+'/STACKED'))/2)):
                 obj = pd.read_pickle(rassine_directory+'/STACKED/RASSINE_prepared_rassine_'+str(l)+'.p')
                 rassine_total_lamda[l] = obj['wave']
-                rassine_raw_spctr[l] = obj['flux']
                 rassine_total_norm_spctr[l] = obj['flux']/obj['matching_diff']['continuum_linear']
                 rassine_total_continuum[l] = obj['matching_diff']['continuum_linear']
                 interpol_err = interp1d(total_lamda[i], total_norm_err[i]**2, kind='cubic', fill_value='extrapolate')
                 rassine_total_norm_err[l] = np.sqrt(interpol_err(master_wav))
-                interpol_err_raw = interp1d(total_lamda[i], total_err[i]**2, kind='cubic', fill_value='extrapolate')
-                rassine_raw_err[l] = np.sqrt(interpol_err_raw(master_wav))
                 
             if plot:
                 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=[14, 8], sharex=True)
-                ax1.errorbar(rassine_total_lamda[8], rassine_raw_spctr[8], yerr=rassine_raw_err[8], fmt='b', label='Data', alpha=0.6)
+                ax1.errorbar(rassine_total_lamda[8], rassine_total_norm_spctr[8]*rassine_total_continuum[8], yerr=rassine_total_norm_err[8]*rassine_total_continuum[8], fmt='b', label='Data', alpha=0.6)
                 ax1.plot(rassine_total_lamda[8], rassine_total_continuum[8], color='r', label='Continuum')
                 ax2.errorbar(rassine_total_lamda[8], rassine_total_norm_spctr[8], yerr=rassine_total_norm_err[8], fmt='b')
             
@@ -1727,7 +1659,7 @@ def new_extraction(location, file_directory, blaze_directory, CCF_directory, tel
                 plt.savefig(save_location + 'Rassine_Normalization.pdf')
                 plt.show()
 
-            return total_lamda, rassine_total_lamda, master_wav, total_spctr, rassine_raw_spctr, total_norm_spctr, rassine_total_norm_spctr, norm_master_spctr, rassine_total_continuum, total_err, rassine_raw_err, total_norm_err, rassine_total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM, total_telluric
+            return total_lamda, rassine_total_lamda, master_wav, total_spctr, total_norm_spctr, rassine_total_norm_spctr, norm_master_spctr, rassine_total_continuum, total_err, total_norm_err, rassine_total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM, total_telluric
   
     else:
         return total_lamda, total_spctr, total_norm_spctr, total_err, total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM, total_telluric
