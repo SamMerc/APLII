@@ -1620,7 +1620,8 @@ def new_extraction(location, file_directory, blaze_directory, CCF_directory, tel
                     obj = pd.read_pickle(rassine_directory+'/MASTER/'+name)
                     norm_master_spctr = obj['flux']/obj['matching_diff']['continuum_linear']
                     master_wav = obj['wave']
-
+            
+            print('Rolling pin radius:', obj['parameters']['min_radius'])
             #Extract the Rassine normalized spectra.
             rassine_total_norm_spctr = np.zeros((int(len(os.listdir(rassine_directory+'/STACKED'))/2), len(master_wav)))
             rassine_total_norm_err = np.zeros((int(len(os.listdir(rassine_directory+'/STACKED'))/2), len(master_wav)))
@@ -1636,9 +1637,9 @@ def new_extraction(location, file_directory, blaze_directory, CCF_directory, tel
                 
             if plot:
                 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=[14, 8], sharex=True)
-                ax1.errorbar(rassine_total_lamda[8], rassine_total_norm_spctr[8]*rassine_total_continuum[8], yerr=rassine_total_norm_err[8]*rassine_total_continuum[8], fmt='b', label='Data', alpha=0.6)
-                ax1.plot(rassine_total_lamda[8], rassine_total_continuum[8], color='r', label='Continuum')
-                ax2.errorbar(rassine_total_lamda[8], rassine_total_norm_spctr[8], yerr=rassine_total_norm_err[8], fmt='b')
+                ax1.plot(obj['wave'], obj['flux'], 'b', label='Data', alpha=0.6)
+                ax1.plot(obj['wave'], obj['matching_diff']['continuum_linear'], color='r', label='Continuum')
+                ax2.errorbar(obj['wave'], obj['flux']/obj['matching_diff']['continuum_linear'], yerr=rassine_total_norm_err[-1], fmt='b')
             
                 ax1.axvline(10833.2, color='red', label='He triplet location')
                 ax1.axvline(10833.3, color='red')
