@@ -723,7 +723,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
         #Extracting the best-fit parameters and the error on the best-fit parameters.
         thetas[i][:-len(low_lim_ews)] = best_params
         err[i][:-len(low_lim_ews)] = np.sqrt(np.diag(cov))
-        
+                
         if fit_func.__name__ == 'planetary_model' or fit_func.__name__ [:-3] == 'planetary_model':
             #Defining the continuum for the EW calculation
             if polynomial_order == -1:
@@ -1281,6 +1281,11 @@ def Correlation_Plot(mode, A, B, A_err, B_err, titleA, titleB, title, day, save_
         ax.text(0.79, 0.80, textstr, transform=ax.transAxes, fontsize=12, bbox = dict(facecolor='white', alpha=0.5))
         if save:
             plt.savefig(save_loc+title+'-'+day[-2:]+'.png')
+            
+        return np.corrcoef(A, B)[0][1]
+     
+            
+        
 
 
 def new_extraction(location, file_directory, blaze_directory, CCF_directory, telluric_directory, rassine_directory, order, wav_ranges, fit_order, save_location='/Users/samsonmercier/Downloads/', Rassine=False, plot=True):
@@ -1577,9 +1582,9 @@ def new_extraction(location, file_directory, blaze_directory, CCF_directory, tel
                     norm_master_spctr_HA = obj['flux']/obj['matching_diff']['continuum_linear']
                     master_wav_HA = obj['wave']
 
+            print('Rolling pin radius for HA:', obj['parameters']['min_radius'])
             #Extract the Rassine normalized spectra.
             rassine_total_norm_spctr_HA = np.zeros((int(len(os.listdir(rassine_directory+'-HA/STACKED'))/2), len(master_wav_HA)))
-            rassine_total_norm_err_HA = np.zeros((int(len(os.listdir(rassine_directory+'-HA/STACKED'))/2), len(master_wav_HA)))
             rassine_total_lamda_HA = np.zeros((int(len(os.listdir(rassine_directory+'-HA/STACKED'))/2), len(master_wav_HA)))
             rassine_total_continuum_HA = np.zeros((int(len(os.listdir(rassine_directory+'-HA/STACKED'))/2), len(master_wav_HA)))
 
@@ -1588,58 +1593,12 @@ def new_extraction(location, file_directory, blaze_directory, CCF_directory, tel
                 rassine_total_lamda_HA[l] = obj['wave']
                 rassine_total_norm_spctr_HA[l] = obj['flux']/obj['matching_diff']['continuum_linear']
                 rassine_total_continuum_HA[l] = obj['matching_diff']['continuum_linear']
-                interpol_err = interp1d(total_lamda[i], total_norm_err[i]**2, kind='cubic', fill_value='extrapolate')
-                rassine_total_norm_err_HA[l] = np.sqrt(interpol_err(master_wav_HA))
             
-            #HE
-            for name in os.listdir(rassine_directory+'-HE/MASTER/'):
-                if name[:7] == 'RASSINE':
-                    obj = pd.read_pickle(rassine_directory+'-HE/MASTER/'+name)
-                    norm_master_spctr_HE = obj['flux']/obj['matching_diff']['continuum_linear']
-                    master_wav_HE = obj['wave']
-
-            #Extract the Rassine normalized spectra.
-            rassine_total_norm_spctr_HE = np.zeros((int(len(os.listdir(rassine_directory+'-HE/STACKED'))/2), len(master_wav_HE)))
-            rassine_total_norm_err_HE = np.zeros((int(len(os.listdir(rassine_directory+'-HE/STACKED'))/2), len(master_wav_HE)))
-            rassine_total_lamda_HE = np.zeros((int(len(os.listdir(rassine_directory+'-HE/STACKED'))/2), len(master_wav_HE)))
-            rassine_total_continuum_HE = np.zeros((int(len(os.listdir(rassine_directory+'-HE/STACKED'))/2), len(master_wav_HE)))
-
-            for l in range(int(len(os.listdir(rassine_directory+'-HE/STACKED'))/2)):
-                obj = pd.read_pickle(rassine_directory+'-HE/STACKED/RASSINE_prepared_rassine_'+str(l)+'.p')
-                rassine_total_lamda_HE[l] = obj['wave']
-                rassine_total_norm_spctr_HE[l] = obj['flux']/obj['matching_diff']['continuum_linear']
-                rassine_total_continuum_HE[l] = obj['matching_diff']['continuum_linear']
-                interpol_err = interp1d(total_lamda[i], total_norm_err[i]**2, kind='cubic', fill_value='extrapolate')
-                rassine_total_norm_err_HE[l] = np.sqrt(interpol_err(master_wav_HE))
-            
-            return total_lamda, rassine_total_lamda_HA, rassine_total_lamda_HE, master_wav_HA, master_wav_HE, total_spctr, total_norm_spctr, rassine_total_norm_spctr_HA, rassine_total_norm_spctr_HE, norm_master_spctr_HA, norm_master_spctr_HE, rassine_total_continuum_HA, rassine_total_continuum_HE, total_err, total_norm_err, rassine_total_norm_err_HA, rassine_total_norm_err_HE, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM, total_telluric
-
-        else:
-            for name in os.listdir(rassine_directory+'/MASTER/'):
-                if name[:7] == 'RASSINE':
-                    obj = pd.read_pickle(rassine_directory+'/MASTER/'+name)
-                    norm_master_spctr = obj['flux']/obj['matching_diff']['continuum_linear']
-                    master_wav = obj['wave']
-            
-            print('Rolling pin radius:', obj['parameters']['min_radius'])
-            #Extract the Rassine normalized spectra.
-            rassine_total_norm_spctr = np.zeros((int(len(os.listdir(rassine_directory+'/STACKED'))/2), len(master_wav)))
-            rassine_total_norm_err = np.zeros((int(len(os.listdir(rassine_directory+'/STACKED'))/2), len(master_wav)))
-            rassine_total_lamda = np.zeros((int(len(os.listdir(rassine_directory+'/STACKED'))/2), len(master_wav)))
-            rassine_total_continuum = np.zeros((int(len(os.listdir(rassine_directory+'/STACKED'))/2), len(master_wav)))
-            for l in range(int(len(os.listdir(rassine_directory+'/STACKED'))/2)):
-                obj = pd.read_pickle(rassine_directory+'/STACKED/RASSINE_prepared_rassine_'+str(l)+'.p')
-                rassine_total_lamda[l] = obj['wave']
-                rassine_total_norm_spctr[l] = obj['flux']/obj['matching_diff']['continuum_linear']
-                rassine_total_continuum[l] = obj['matching_diff']['continuum_linear']
-                interpol_err = interp1d(total_lamda[i], total_norm_err[i]**2, kind='cubic', fill_value='extrapolate')
-                rassine_total_norm_err[l] = np.sqrt(interpol_err(master_wav))
-                
             if plot:
                 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=[14, 8], sharex=True)
                 ax1.plot(obj['wave'], obj['flux'], 'b', label='Data', alpha=0.6)
                 ax1.plot(obj['wave'], obj['matching_diff']['continuum_linear'], color='r', label='Continuum')
-                ax2.errorbar(obj['wave'], obj['flux']/obj['matching_diff']['continuum_linear'], yerr=rassine_total_norm_err[-1], fmt='b')
+                ax2.plot(obj['wave'], obj['flux']/obj['matching_diff']['continuum_linear'], 'b')
             
                 ax1.axvline(10833.2, color='red', label='He triplet location')
                 ax1.axvline(10833.3, color='red')
@@ -1660,7 +1619,72 @@ def new_extraction(location, file_directory, blaze_directory, CCF_directory, tel
                 plt.savefig(save_location + 'Rassine_Normalization.pdf')
                 plt.show()
 
-            return total_lamda, rassine_total_lamda, master_wav, total_spctr, total_norm_spctr, rassine_total_norm_spctr, norm_master_spctr, rassine_total_continuum, total_err, total_norm_err, rassine_total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM, total_telluric
+            #HE
+            for name in os.listdir(rassine_directory+'-HE/MASTER/'):
+                if name[:7] == 'RASSINE':
+                    obj = pd.read_pickle(rassine_directory+'-HE/MASTER/'+name)
+                    norm_master_spctr_HE = obj['flux']/obj['matching_diff']['continuum_linear']
+                    master_wav_HE = obj['wave']
+                    
+            print('Rolling pin radius for HE:', obj['parameters']['min_radius'])
+            #Extract the Rassine normalized spectra.
+            rassine_total_norm_spctr_HE = np.zeros((int(len(os.listdir(rassine_directory+'-HE/STACKED'))/2), len(master_wav_HE)))
+            rassine_total_lamda_HE = np.zeros((int(len(os.listdir(rassine_directory+'-HE/STACKED'))/2), len(master_wav_HE)))
+            rassine_total_continuum_HE = np.zeros((int(len(os.listdir(rassine_directory+'-HE/STACKED'))/2), len(master_wav_HE)))
+
+            for l in range(int(len(os.listdir(rassine_directory+'-HE/STACKED'))/2)):
+                obj = pd.read_pickle(rassine_directory+'-HE/STACKED/RASSINE_prepared_rassine_'+str(l)+'.p')
+                rassine_total_lamda_HE[l] = obj['wave']
+                rassine_total_norm_spctr_HE[l] = obj['flux']/obj['matching_diff']['continuum_linear']
+                rassine_total_continuum_HE[l] = obj['matching_diff']['continuum_linear']
+            
+            return total_lamda, rassine_total_lamda_HA, rassine_total_lamda_HE, master_wav_HA, master_wav_HE, total_spctr, total_norm_spctr, rassine_total_norm_spctr_HA, rassine_total_norm_spctr_HE, norm_master_spctr_HA, norm_master_spctr_HE, rassine_total_continuum_HA, rassine_total_continuum_HE, total_err, total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM, total_telluric
+
+        else:
+            for name in os.listdir(rassine_directory+'/MASTER/'):
+                if name[:7] == 'RASSINE':
+                    obj = pd.read_pickle(rassine_directory+'/MASTER/'+name)
+                    norm_master_spctr = obj['flux']/obj['matching_diff']['continuum_linear']
+                    master_wav = obj['wave']
+            
+            print('Rolling pin radius:', obj['parameters']['min_radius'])
+            
+            #Extract the Rassine normalized spectra.
+            rassine_total_norm_spctr = np.zeros((int(len(os.listdir(rassine_directory+'/STACKED'))/2), len(master_wav)))
+            rassine_total_lamda = np.zeros((int(len(os.listdir(rassine_directory+'/STACKED'))/2), len(master_wav)))
+            rassine_total_continuum = np.zeros((int(len(os.listdir(rassine_directory+'/STACKED'))/2), len(master_wav)))
+            for l in range(int(len(os.listdir(rassine_directory+'/STACKED'))/2)):
+                obj = pd.read_pickle(rassine_directory+'/STACKED/RASSINE_prepared_rassine_'+str(l)+'.p')
+                rassine_total_lamda[l] = obj['wave']
+                rassine_total_norm_spctr[l] = obj['flux']/obj['matching_diff']['continuum_linear']
+                rassine_total_continuum[l] = obj['matching_diff']['continuum_linear']
+                
+            if plot:
+                fig, (ax1, ax2) = plt.subplots(2, 1, figsize=[14, 8], sharex=True)
+                ax1.plot(obj['wave'], obj['flux'], 'b', label='Data', alpha=0.6)
+                ax1.plot(obj['wave'], obj['matching_diff']['continuum_linear'], color='r', label='Continuum')
+                ax2.plot(obj['wave'], obj['flux']/obj['matching_diff']['continuum_linear'], 'b')
+            
+                ax1.axvline(10833.2, color='red', label='He triplet location')
+                ax1.axvline(10833.3, color='red')
+                ax1.axvline(10832.1, color='red')
+                ax1.axvline(10830.1, color='green')
+                ax1.axvline(10830.1, color='green', label='Si line location')
+                ax2.axvline(10833.2, color='red')
+                ax2.axvline(10833.3, color='red')
+                ax2.axvline(10832.1, color='red')
+                ax2.axvline(10830.1, color='green')
+                ax2.axvline(10830.1, color='green')
+                ax1.set_ylabel('Stellar Spectrum')
+                ax2.set_ylabel('Normalized Stellar Spectrum')
+                ax2.set_xlabel('Wavelength ($\AA$)')
+                ax1.set_xlim(wav_ranges[0][0]-5, wav_ranges[-1][1]+5)
+                ax1.legend()
+                fig.subplots_adjust(hspace=0)
+                plt.savefig(save_location + 'Rassine_Normalization.pdf')
+                plt.show()
+
+            return total_lamda, rassine_total_lamda, master_wav, total_spctr, total_norm_spctr, rassine_total_norm_spctr, norm_master_spctr, rassine_total_continuum, total_err, total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM, total_telluric
   
     else:
         return total_lamda, total_spctr, total_norm_spctr, total_err, total_norm_err, total_SNR, mode, date, total_RV, total_RV_err, total_FWHM, total_FWHM_err, total_BIS_SPAN, total_BIS_SPAN_err, total_CONTRAST, total_CONTRAST_err, total_H2O, total_H2O_err, total_O2, total_O2_err, total_CO2, total_CO2_err, total_AIRM, total_telluric
