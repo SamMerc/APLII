@@ -701,6 +701,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
         lmfit_thetas = np.ones((len(y), len(ini_guess)+len(low_lim_ews)))
         lmfit_err = np.ones((len(y), len(ini_guess)+len(low_lim_ews)))
     err = np.zeros((len(y), len(ini_guess)+len(low_lim_ews)))
+    bootstrap_err = np.zeros((len(y), len(ini_guess)+len(low_lim_ews)))
     cont = np.zeros(x.shape)
     
     #Looping over all the arrays(/spectra).
@@ -723,7 +724,47 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
         #Extracting the best-fit parameters and the error on the best-fit parameters.
         thetas[i][:-len(low_lim_ews)] = best_params
         err[i][:-len(low_lim_ews)] = np.sqrt(np.diag(cov))
-                
+        
+        #Doing some bootstrapping#
+        bootstrap=False
+        if fit_func.__name__ == 'planetary_model' or fit_func.__name__ [:-3] == 'planetary_model':
+            bootstrap=True
+            print('BOOTSTRAPPING')
+            #Generating some flux arrays
+            new_flux = bootstrap_generate(bound_y, bound_y_err, K)
+            new_unbound_flux = bootstrap_generate(y[i], y_err[i], K)
+
+            #Initializing an array to store the parameter values
+            temp_params = np.zeros((K, len(ini_guess)+len(low_lim_ews)))
+            for d in range(len(new_flux)):
+                #Do the fitting
+                if len(y_err)!=0:
+                    output_curve = curve_fit(fit_func, bound_x, new_flux[d], sigma=bound_y_err, p0 = ini_guess, bounds = guess_bounds)
+                else:
+                    output_curve = curve_fit(fit_func, bound_x, new_flux[d], p0 = ini_guess, bounds = guess_bounds)
+
+                #Store the best-fit parameters
+                temp_params[d][:-len(low_lim_ews)] = output_curve[0]
+
+                #Getting the continuum for the equivalent width
+                poly_coeff_bootstrap = output_curve[0][7:]
+                polynom_bootstrap = np.poly1d(poly_coeff_bootstrap[::-1])
+                cont_bootstrap = polynom_bootstrap(x[i])
+
+                #Calculate the EW
+                if len(y_err)!=0:
+                    bootstrap_eq_widths, bootstrap_eq_width_errs = equivalent_width_calculator(x[i], new_unbound_flux[d], y_err[i], cont_bootstrap, low_lim_ews, up_lim_ews, False) 
+                else:
+                    bootstrap_eq_widths = equivalent_width_calculator(x[i], new_unbound_flux[d], [], cont_bootstrap, low_lim_ews, up_lim_ews, False)
+                for o in range(len(low_lim_ews)):
+                    index = len(ini_guess)+o
+                    temp_params[d][index] = bootstrap_eq_widths[o]
+
+            #Getting the errors from bootstrapping
+            erro = np.std(temp_params, axis=0)
+            bootstrap_err[i] = erro
+        ##########################
+        
         if fit_func.__name__ == 'planetary_model' or fit_func.__name__ [:-3] == 'planetary_model':
             #Defining the continuum for the EW calculation
             if polynomial_order == -1:
@@ -860,7 +901,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
             new_param_names = param_names + ['He EW', 'Si EW']
             print('Continuum coeff:', poly_coefficients)
             for j in range(len(thetas[i])):
-                    print(new_param_names[j], ' :', thetas[i][j], err[i][j])
+                    print(new_param_names[j], ' :', thetas[i][j], err[i][j], bootstrap_err[i][j])
         else:
             print('Continuum coeff:', poly_coefficients)
             new_param_names = param_names + ['T EW']
@@ -943,7 +984,10 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
     if method_lmfit != '':
         return thetas, err, lmfit_thetas, lmfit_err
     else:
-        return thetas, err
+        if bootstrap:
+            return thetas, err, bootstrap_err
+        else:
+            return thetas, err
 
 def fit_spctr_line_special(fit_func, include_ranges, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, guess_bounds, x, y, y_err, c, wav_ranges, param_names, R_power, plot=True, N=100):
     '''
