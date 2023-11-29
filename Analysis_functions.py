@@ -22,6 +22,11 @@ os.chdir('/Users/samsonmercier/Desktop/UNIGE/Winter_Semester_2022-2023/APLII/he_
 import spectrum_model as spec_mod
 import line_model as line_mod
 
+#Defining masses of species
+amu=1.660531e-27    # kg
+m_He = 4.002602 * amu
+m_Si = 28.0855 * amu
+
 def extraction(file_directory, blaze_directory, CCF_directory, order):
     '''
     Function to extract the important quantities from the FITS files for a given day of solar observations.
@@ -479,6 +484,26 @@ def sinusoid(t, A, phase, offset, period):
     sin_mod = offset + A*np.sin((2*np.pi*t/period) + phase)
     return sin_mod
    
+def Temp_to_Width(m, T, R):
+    '''
+    Function transforming the temperature retrieved from our fit to a width in angstrom.
+    Parameters
+    ----------
+    :param m: float, mass of the species considered in kg.
+    :param T: float, atmospheric temperature retrieved from the fit.
+    :param R: float, resolving power considered.
+
+    Returns
+    ----------
+    :param w: float, width in m/s.
+    '''
+
+    k_B = 1.3806488e-23   # m2 kg s-2 K-1
+    c = 299792458.    # m / s
+    A = (2*k_B*T)/m
+    B = (c/R)**2
+    w = np.sqrt(A+B)
+    return w
     
 def bootstrap_generate(flux, flux_err, k):
     '''
@@ -661,7 +686,6 @@ def breakpoint_resolver(x, T, n, d, RV, R_pow):
     delta = gauss_profile - voigt_profile
     return delta
 
-
 def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess, guess_bounds, x, y, y_err, param_names, method_lmfit, R_power, polynomial_order=0, plot=True, K=500):
     '''
     Routine to fit a function, fit_func, to a spectral line located in the wavelength range [low_lim, up_lim].
@@ -727,7 +751,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
         
         #Doing some bootstrapping#
         bootstrap=False
-        if (fit_func.__name__ == 'planetary_model' or fit_func.__name__ [:-3] == 'planetary_model') and 1==0:
+        if (fit_func.__name__ == 'planetary_model' or fit_func.__name__ [:-3] == 'planetary_model'):
             bootstrap=True
             print('BOOTSTRAPPING')
             #Generating some flux arrays
@@ -901,7 +925,14 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
             new_param_names = param_names + ['He EW', 'Si EW']
             print('Continuum coeff:', poly_coefficients)
             for j in range(len(thetas[i])):
-                    print(new_param_names[j], ' :', thetas[i][j], err[i][j], bootstrap_err[i][j])
+                    if 'log_temp' in new_param_names[j]:
+                        if 'Si' in new_param_names[j]:
+                            print(new_param_names[j], ' :', thetas[i][j], err[i][j], bootstrap_err[i][j], Temp_to_Width(m_Si, 10**(thetas[i][j]), R_power))
+                        elif 'He' in new_param_names[j]:
+                            print(new_param_names[j], ' :', thetas[i][j], err[i][j], bootstrap_err[i][j], Temp_to_Width(m_He, 10**(thetas[i][j]), R_power))
+                    else:
+                        print(new_param_names[j], ' :', thetas[i][j], err[i][j], bootstrap_err[i][j])
+
         else:
             print('Continuum coeff:', poly_coefficients)
             new_param_names = param_names + ['T EW']
@@ -984,10 +1015,8 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
     if method_lmfit != '':
         return thetas, err, lmfit_thetas, lmfit_err
     else:
-        if bootstrap:
-            return thetas, err, bootstrap_err
-        else:
-            return thetas, err
+        return thetas, err, bootstrap_err
+
 
 def fit_spctr_line_special(fit_func, include_ranges, low_lim, up_lim, low_lim_ew, up_lim_ew, ini_guess, guess_bounds, x, y, y_err, c, wav_ranges, param_names, R_power, plot=True, N=100):
     '''
