@@ -751,7 +751,7 @@ def fit_spctr_line(fit_func, low_lim, up_lim, low_lim_ews, up_lim_ews, ini_guess
         
         #Doing some bootstrapping#
         bootstrap=False
-        if (fit_func.__name__ == 'planetary_model' or fit_func.__name__ [:-3] == 'planetary_model'):
+        if (fit_func.__name__ == 'planetary_model' or fit_func.__name__ [:-3] == 'planetary_model') and 1==0:
             bootstrap=True
             print('BOOTSTRAPPING')
             #Generating some flux arrays
